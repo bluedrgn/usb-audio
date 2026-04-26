@@ -28,13 +28,103 @@
 #endif
 static const float PI = M_PI;
 
+/** https://en.wikipedia.org/wiki/VU_meter */
+
 static const float framerate = 1000.0;  /**< Expected frequency of calling meter_update_VU. */
-static const float rise_time = 0.01;
+static const float rise_time = 0.3;
 static const float fall_time = 0.3;
 static const float P_gain = 30.0;
 static const float I_gain = 0.5;
-static const float sensitivity_gain = 8.0;
+static const float sensitivity_gain = 18.5;
 
+
+static void reverseBresenhamsLine(microGL_Framebuffer_t *screen, float angle_rad, int16_t pivot_x, int16_t pivot_y, int16_t length);
+
+static void update_phys(meter_instance_t *meter) {
+  float error;
+
+  error = meter->value - meter->position;
+
+  meter->inertia += error;
+  meter->position += error * (P_gain / framerate)
+          + meter->inertia * (I_gain / framerate);
+
+  meter->position = CLAMP(meter->position, 0.f, 1.f);
+}
+
+void meter_init(
+  meter_instance_t *meter,
+  float zero_angle,
+  float max_angle,
+  uint32_t sample_rate,
+  int16_t pivot_x,
+  int16_t pivot_y,
+  int16_t length)
+{
+  meter->zero_angle = zero_angle;
+  meter->precession = max_angle - zero_angle;
+  meter->sample_rate = sample_rate;
+  meter->length = length;
+  meter->pivot_x = pivot_x;
+  meter->pivot_y = pivot_y;
+  meter->position = 0;
+  meter->inertia = 0;
+  meter->peak = 0;
+  meter->value = 0;
+  #ifdef VU_LOWPASS
+  meter->state[0] = 0;
+  meter->state[1] = 0;
+  meter->state[2] = 0;
+  meter->state[3] = 0;
+  #endif
+  meter->rise_slope = (M_LN10 / rise_time) / meter->sample_rate;
+  meter->fall_slope = (-1.0 / fall_time) / meter->sample_rate;
+}
+
+void meter_draw_needle(microGL_Framebuffer_t *screen, meter_instance_t *meter) {
+  float rad;
+
+  rad = meter->zero_angle + (meter->position * meter->precession);
+
+  reverseBresenhamsLine(screen, rad, meter->pivot_x, meter->pivot_y, meter->length);
+}
+
+void meter_update_VU_q15(meter_instance_t *meter, int16_t *buffer, size_t buffer_size) {
+  float fbuf[buffer_size];
+
+  arm_q15_to_float(buffer, fbuf, buffer_size);
+  meter_update_VU(meter, fbuf, buffer_size);
+}
+
+void meter_update_VU(meter_instance_t *meter, float *buffer, size_t buffer_size) {
+  #ifdef VU_LOWPASS
+  const float coeffs[5] = {2.051734e-02, 2.051734e-02, 0, 9.589653e-01, 0}; //6.6667Hz @ 1KHz
+  arm_biquad_casd_df1_inst_f32 LPF = {1, meter->state, coeffs};
+  #endif
+  float diff;
+  float acc;
+  
+  arm_scale_f32(buffer, sensitivity_gain, buffer, buffer_size);
+  arm_abs_f32(buffer, buffer, buffer_size);
+
+  acc = 0;
+  for (size_t i = 0; i < buffer_size; i++) {
+    diff = buffer[i] - meter->peak;
+
+    if (diff >= 0) meter->peak += MIN(diff, meter->rise_slope);
+    else meter->peak += MAX(diff, meter->fall_slope);
+
+    acc += meter->peak;
+  }
+
+  #ifdef VU_LOWPASS
+  float out = acc / buffer_size;
+  arm_biquad_cascade_df1_f32(&LPF, &out, &meter->value, 1);
+  #else
+  meter->value = acc / buffer_size;
+  #endif
+  update_phys(meter);
+}
 
 static void reverseBresenhamsLine_vertical(microGL_Framebuffer_t *screen, float angle_rad, int16_t pivot_x, int16_t pivot_y, int16_t length) {
   int16_t endpoint_y;
@@ -114,90 +204,4 @@ static void reverseBresenhamsLine(microGL_Framebuffer_t *screen, float angle_rad
   default:
     break;
   }
-}
-
-static void update_phys(meter_instance_t *meter) {
-  float error;
-
-  error = meter->value - meter->position;
-
-  meter->inertia += error;
-  meter->position += error * (P_gain / framerate)
-          + meter->inertia * (I_gain / framerate);
-
-  meter->position = CLAMP(meter->position, 0.f, 1.f);
-}
-
-void meter_init(
-  meter_instance_t *meter,
-  float zero_angle,
-  float max_angle,
-  uint32_t sample_rate,
-  int16_t pivot_x,
-  int16_t pivot_y,
-  int16_t length)
-{
-  meter->zero_angle = zero_angle;
-  meter->precession = max_angle - zero_angle;
-  meter->sample_rate = sample_rate;
-  meter->length = length;
-  meter->pivot_x = pivot_x;
-  meter->pivot_y = pivot_y;
-  meter->position = 0;
-  meter->inertia = 0;
-  meter->peak = 0;
-  meter->value = 0;
-  #ifdef VU_LOWPASS
-  meter->state[0] = 0;
-  meter->state[1] = 0;
-  meter->state[2] = 0;
-  meter->state[3] = 0;
-  #endif
-  meter->rise_slope = (1. / rise_time) / meter->sample_rate;
-  meter->fall_slope = (-1. / fall_time) / meter->sample_rate;
-}
-
-void meter_draw_needle(microGL_Framebuffer_t *screen, meter_instance_t *meter) {
-  float rad;
-
-  rad = meter->zero_angle + (meter->position * meter->precession);
-
-  reverseBresenhamsLine(screen, rad, meter->pivot_x, meter->pivot_y, meter->length);
-}
-
-void meter_update_VU_q15(meter_instance_t *meter, int16_t *buffer, size_t buffer_size) {
-  float fbuf[buffer_size];
-
-  arm_q15_to_float(buffer, fbuf, buffer_size);
-  meter_update_VU(meter, fbuf, buffer_size);
-}
-
-void meter_update_VU(meter_instance_t *meter, float *buffer, size_t buffer_size) {
-  #ifdef VU_LOWPASS
-  const float coeffs[5] = {2.051734e-02, 2.051734e-02, 0, 9.589653e-01, 0}; //6.6667Hz @ 1KHz
-  arm_biquad_casd_df1_inst_f32 LPF = {1, meter->state, coeffs};
-  #endif
-  float diff;
-  float acc;
-  
-  arm_scale_f32(buffer, sensitivity_gain, buffer, buffer_size);
-  arm_abs_f32(buffer, buffer, buffer_size);
-
-  acc = 0;
-  for (size_t i = 0; i < buffer_size; i++) {
-    diff = buffer[i] - meter->peak;
-
-    if (diff >= 0) meter->peak += MIN(diff, meter->rise_slope);
-    else meter->peak += MAX(diff, meter->fall_slope);
-
-    acc += meter->peak;
-  }
-
-  #ifdef VU_LOWPASS
-  float out = acc / buffer_size;
-  arm_biquad_cascade_df1_f32(&LPF, &out, &meter->value, 1);
-  #else
-  meter->value = acc / buffer_size;
-  #endif
-  update_phys(meter);
 }
