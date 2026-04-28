@@ -2,8 +2,14 @@
 
 #include "audio_player.h"
 
-#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
-#define MAX(a, b)  (((a) > (b)) ? (a) : (b))
-#define CLAMP(x,min,max) MAX((min),MIN((max),(x)))
-
-AudioSample_q15_t AudioSample_cubic_interpolate(AudioSample_q15_t *s, int16_t x);
+#ifndef MIN
+    #define MIN(a, b)  (((a) < (b)) ? (a) : (b))
+#endif
+#ifndef MAX
+    #define MAX(a, b)  (((a) > (b)) ? (a) : (b))
+#endif
+#ifndef CLAMP
+    #define CLAMP(x,min,max) MAX((min),MIN((max),(x)))
+#endif
+// AudioSample_q15_t AudioSample_cubic_interpolate_q15(AudioSample_q15_t *s, int16_t x);
+AudioSample_f32_t AudioSample_cubic_interpolate_f32(AudioSample_f32_t *s, float x);

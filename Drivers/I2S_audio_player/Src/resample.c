@@ -4,38 +4,71 @@
 
 /* https://developer.arm.com/documentation/dai0033/latest/ */
 /* The basic operations perfomed on two numbers x and y of fixed point q15 format returning the answer in q15 format */
-#define FMULL(x,y) (int32_t)(((int64_t)(x)*(int64_t)(y))>>15)
+// #define FMULL(x,y) (int32_t)(((int64_t)(x)*(int64_t)(y))>>15)
 // #define FMUL(x,y) (((int32_t)(x)*(y))>>(15))
 
 
-static int16_t cubic_interpolate_q15(int16_t *v, int16_t x)
+// static int16_t cubic_interpolate_q15(int16_t *v, int16_t x)
+// {
+//   int32_t a = (int32_t)v[0] - (int32_t)v[2];
+//   int32_t b = 3 * a;
+//   int32_t c = b + (int32_t)v[4];
+//   int32_t d = c - (int32_t)v[-2];
+//   int32_t e = FMULL(x, d);
+//   int32_t f = 2 * (int32_t)v[-2];
+//   int32_t g = 5 * (int32_t)v[0];
+//   int32_t h = 4 * (int32_t)v[2];
+//   int32_t i = f - g;
+//   int32_t j = i + h;
+//   int32_t k = j - (int32_t)v[4];
+//   int32_t l = k + e;
+//   int32_t m = FMULL(x, l);
+//   int32_t n = (int32_t)v[2] - (int32_t)v[-2];
+//   int32_t o = n + m;
+//   int32_t p = FMULL(x, o);
+//   int32_t q = p / 2;
+//   int32_t r = (int32_t)v[0] + q;
+//   return CLAMP(r, INT16_MIN, INT16_MAX);
+// }
+
+
+// AudioSample_q15_t AudioSample_cubic_interpolate_q15(AudioSample_q15_t *s, int16_t x)
+// {
+//   AudioSample_q15_t ret;
+//   ret.L = cubic_interpolate_q15(&s->L, x);
+//   ret.R = cubic_interpolate_q15(&s->R, x);
+//   return ret;
+// }
+
+
+static float cubic_interpolate_f32(float *v, float x)
 {
-  int32_t a = (int32_t)v[0] - (int32_t)v[2];
-  int32_t b = 3 * a;
-  int32_t c = b + (int32_t)v[4];
-  int32_t d = c - (int32_t)v[-2];
-  int32_t e = FMULL(x, d);
-  int32_t f = 2 * (int32_t)v[-2];
-  int32_t g = 5 * (int32_t)v[0];
-  int32_t h = 4 * (int32_t)v[2];
-  int32_t i = f - g;
-  int32_t j = i + h;
-  int32_t k = j - (int32_t)v[4];
-  int32_t l = k + e;
-  int32_t m = FMULL(x, l);
-  int32_t n = (int32_t)v[2] - (int32_t)v[-2];
-  int32_t o = n + m;
-  int32_t p = FMULL(x, o);
-  int32_t q = p / 2;
-  int32_t r = (int32_t)v[0] + q;
-  return CLAMP(r, INT16_MIN, INT16_MAX);
+  float a = v[0] - v[2];
+  float b = a * 3.0f;
+  float c = b + v[4];
+  float d = c - v[-2];
+  float e = d * x;
+  float f = v[-2] * 2.0f;
+  float g = v[0] * 5.0f;
+  float h = v[2] * 4.0f;
+  float i = f - g;
+  float j = i + h;
+  float k = j - v[4];
+  float l = k + e;
+  float m = l * x;
+  float n = v[2] - v[-2];
+  float o = n + m;
+  float p = o * x;
+  float q = p * 0.5f;
+  float r = v[0] + q;
+  return r;
 }
 
-AudioSample_q15_t AudioSample_cubic_interpolate(AudioSample_q15_t *s, int16_t x)
+AudioSample_f32_t AudioSample_cubic_interpolate_f32(AudioSample_f32_t *s, float x)
 {
-  AudioSample_q15_t ret;
-  ret.L = cubic_interpolate_q15(&s->L, x);
-  ret.R = cubic_interpolate_q15(&s->R, x);
+  AudioSample_f32_t ret;
+  ret.L = cubic_interpolate_f32(&s->L, x);
+  ret.R = cubic_interpolate_f32(&s->R, x);
   return ret;
 }
 

@@ -16,6 +16,8 @@ set_source_files_properties(
         COMPILE_OPTIONS "-O3"
 )
 
-target_link_libraries(I2S_audio_player
+target_link_libraries(I2S_audio_player PRIVATE
     stm32cubemx
+    CMSISDSP
+    m
 )

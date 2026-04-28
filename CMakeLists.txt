@@ -36,6 +36,7 @@ add_executable(${CMAKE_PROJECT_NAME})
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
+add_subdirectory(Middlewares/CMSIS-DSP)
 add_subdirectory(Middlewares/microGL)
 # add_subdirectory(Drivers/SH1106_I2C)
 add_subdirectory(Drivers/SSD1306_I2C)
@@ -71,12 +72,34 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
+    CMSISDSP
     microGL
     # SH1106_I2C
     SSD1306_I2C
     # GU128X32D
     I2S_audio_player
     # Add user defined libraries
+)
+
+target_link_options(${CMAKE_PROJECT_NAME} PRIVATE 
+    $<$<CONFIG:Debug>:-u _printf_float>
+)
+
+target_include_directories(CMSISDSP PRIVATE
+    ${CMAKE_SOURCE_DIR}/Drivers/CMSIS/Include 
+    ${CMAKE_SOURCE_DIR}/Drivers/CMSIS/Device/ST/STM32F4xx/Include
+)
+
+target_compile_definitions(CMSISDSP PUBLIC
+    ARM_MATH_CM4
+)
+
+target_compile_options(CMSISDSP PRIVATE
+    -mcpu=cortex-m4
+    -mthumb
+    -mfloat-abi=hard
+    -mfpu=fpv4-sp-d16
+    -O3
 )
 
 # set_source_files_properties(

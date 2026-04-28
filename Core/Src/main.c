@@ -71,7 +71,7 @@ DMA_HandleTypeDef hdma_usart1_tx;
 USBD_HandleTypeDef hUsbDevice;
 static uint8_t framebuffer[SSD1306_FB_SIZE * 2];
 static AudioPlayer_HandleTypeDef speaker;
-static AudioSample_q15_t audiobuffer[768];
+static AUDIOSAMPLE_TYPE audiobuffer[768];
 static meter_instance_t VUmeter[2];
 /* USER CODE END PV */
 
@@ -141,7 +141,10 @@ int main(void)
 
   #ifdef DEBUG
   MX_USART1_UART_Init();
+  HAL_Delay(1);
   printf("\r\nRESET\r\n");
+  fflush(stdout);
+  HAL_Delay(10);
   #endif
 
   ssd1306_init(&display);
@@ -282,7 +285,7 @@ static void MX_I2S2_Init(void)
   hi2s2.Instance = SPI2;
   hi2s2.Init.Mode = I2S_MODE_MASTER_TX;
   hi2s2.Init.Standard = I2S_STANDARD_PHILIPS;
-  hi2s2.Init.DataFormat = I2S_DATAFORMAT_16B;
+  hi2s2.Init.DataFormat = I2S_DATAFORMAT_32B;
   hi2s2.Init.MCLKOutput = I2S_MCLKOUTPUT_DISABLE;
   hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_48K;
   hi2s2.Init.CPOL = I2S_CPOL_LOW;
@@ -397,26 +400,32 @@ void stream_end() {
   audio_player_stop(&speaker);
 }
 
+#include "arm_math.h"
 void data_received(int16_t* buff, uint16_t size) {
-  int16_t Lch[size/2], Rch[size/2];
-  AudioSample_q15_t *sb = (AudioSample_q15_t*)buff;
+  float Lch[size/2], Rch[size/2];
+  AudioSample_f32_t fbuff[size/2];
+  arm_q15_to_float(buff, (float*)fbuff, size);
 
-  audio_player_enque_samples(&speaker, sb, size/2);
+  audio_player_enque_samples(&speaker, fbuff, size/2);
 
   for (size_t i = 0; i < size/2; i++) {
-    Lch[i] = sb[i].L;
-    Rch[i] = sb[i].R;
+    Lch[i] = fbuff[i].L;
+    Rch[i] = fbuff[i].R;
   }
 
-  meter_update_VU_q15(&VUmeter[0], Lch, size/2);
-  meter_update_VU_q15(&VUmeter[1], Rch, size/2);
+  meter_update_VU(&VUmeter[0], Lch, size/2);
+  meter_update_VU(&VUmeter[1], Rch, size/2);
+}
+
+void volume_change(int16_t volume) {
+  audio_player_set_volume(&speaker, volume);
 }
 
 USB_Audio_IntfTypeDef USB_Audio_Interface = {
   .stream_start = stream_start,
   .stream_end = stream_end,
   .audio_data_received = data_received,
-  .set_volume = NULL,
+  .set_volume = volume_change,
   .set_mute = NULL
 };
 

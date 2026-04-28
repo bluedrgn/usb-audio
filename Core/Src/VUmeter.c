@@ -35,7 +35,7 @@ static const float rise_time = 0.3;
 static const float fall_time = 0.3;
 static const float P_gain = 30.0;
 static const float I_gain = 0.5;
-static const float sensitivity_gain = 18.5;
+static const float sensitivity_gain = 1.156324;
 
 
 static void reverseBresenhamsLine(microGL_Framebuffer_t *screen, float angle_rad, int16_t pivot_x, int16_t pivot_y, int16_t length);
@@ -49,7 +49,15 @@ static void update_phys(meter_instance_t *meter) {
   meter->position += error * (P_gain / framerate)
           + meter->inertia * (I_gain / framerate);
 
-  meter->position = CLAMP(meter->position, 0.f, 1.f);
+  if (meter->position <= 0.0f) {
+    meter->position = 0.0f;
+    meter->inertia = 0.0f;
+  }
+
+  if (meter->position >= 1.0f) {
+    meter->position = 1.0f;
+    meter->inertia = 0.0f;
+  }
 }
 
 void meter_init(
@@ -77,8 +85,8 @@ void meter_init(
   meter->state[2] = 0;
   meter->state[3] = 0;
   #endif
-  meter->rise_slope = (M_LN10 / rise_time) / meter->sample_rate;
-  meter->fall_slope = (-1.0 / fall_time) / meter->sample_rate;
+  meter->rise_slope = ( 2.0f / rise_time) / meter->sample_rate;
+  meter->fall_slope = (-1.0f / fall_time) / meter->sample_rate;
 }
 
 void meter_draw_needle(microGL_Framebuffer_t *screen, meter_instance_t *meter) {

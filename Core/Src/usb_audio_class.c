@@ -1,20 +1,28 @@
 #include "usb_audio_class.h"
+#include "main.h"
 #include "stm32f4xx_hal.h"
 #include "usbd_conf.h"
 #include "usbd_def.h"
 #include "usbd_ctlreq.h"
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+// #ifdef DEBUG
+// #include <stdio.h>
+// #endif
 
 /* https://usb.org/document-library/audio-device-document-10 */
+
+
+/* Feature Unit Control selectors */
+#define MUTE_CONTROL      0x01
+#define VOLUME_CONTROL    0x02
 
 #define USBD_AUDIO_FREQ                               48000U
 #define USBD_MAX_NUM_INTERFACES                       1U
 #define AUDIO_BINTERVAL                               1U
 #define AUDIO_OUT_EP                                  1U
-#define USB_AUDIO_CONFIG_DESC_SIZE                    100U
+#define USB_AUDIO_CONFIG_DESC_SIZE                    109U
 #define AUDIO_INTERFACE_DESC_SIZE                     9U
 #define USB_AUDIO_DESC_SIZE                           9U
 #define AUDIO_STANDARD_ENDPOINT_DESC_SIZE             9U
@@ -35,20 +43,31 @@
 #define AUDIO_CONTROL_HEADER                          0x01U
 #define AUDIO_CONTROL_INPUT_TERMINAL                  0x02U
 #define AUDIO_CONTROL_OUTPUT_TERMINAL                 0x03U
-// #define AUDIO_CONTROL_FEATURE_UNIT                    0x06U
+#define AUDIO_CONTROL_FEATURE_UNIT                    0x06U
 #define AUDIO_INPUT_TERMINAL_DESC_SIZE                12U
 #define AUDIO_OUTPUT_TERMINAL_DESC_SIZE               9U
 #define AUDIO_STREAMING_INTERFACE_DESC_SIZE           7U
-// #define AUDIO_CONTROL_MUTE                            0x0001U
+#define AUDIO_CONTROL_MUTE                            0x01U
+#define AUDIO_CONTROL_VOLUME                          0x02U
 #define AUDIO_FORMAT_TYPE_I                           0x01U
 #define AUDIO_FORMAT_TYPE_III                         0x03U
 #define AUDIO_ENDPOINT_GENERAL                        0x01U
-#define AUDIO_REQ_GET_CUR                             0x81U
-#define AUDIO_REQ_SET_CUR                             0x01U
 #define AUDIO_OUT_STREAMING_CTRL                      0x02U
 #define AUDIO_OUT_TC                                  0x01U
 #define AUDIO_IN_TC                                   0x02U
 #define AUDIO_DELAY                                   10U
+
+/* Class specific request codes */
+#define AUDIO_REQ_SET         0x00
+#define AUDIO_REQ_GET         0x80
+#define AUDIO_REQ_SET_CUR     0x01
+#define AUDIO_REQ_GET_CUR     0x81
+#define AUDIO_REQ_SET_MIN     0x02
+#define AUDIO_REQ_GET_MIN     0x82
+#define AUDIO_REQ_SET_MAX     0x03
+#define AUDIO_REQ_GET_MAX     0x83
+#define AUDIO_REQ_SET_RES     0x04
+#define AUDIO_REQ_GET_RES     0x84
 
 #define AUDIO_OUT_PACKET \
   (uint16_t)(((USBD_AUDIO_FREQ * 2U * 2U) / 1000U))
@@ -61,15 +80,22 @@
 
 
 typedef struct {
-  uint8_t cmd;
-  uint8_t unit;
+  uint8_t reqest;
+  uint8_t unit_id;
+  uint8_t selector;
   uint16_t len;
   uint8_t data[USB_MAX_EP0_SIZE];
 } USB_Audio_ControlTypeDef;
 
 typedef struct {
+  uint8_t mute;
+  int16_t volume;
+} USB_Audio_StatusTypeDef;
+
+typedef struct {
   // uint32_t alt_setting;
   USB_Audio_ControlTypeDef control;
+  USB_Audio_StatusTypeDef status;
   uint8_t RxBuff[AUDIO_OUT_PACKET];
 } USB_Audio_HandleTypeDef;
 
@@ -87,13 +113,12 @@ static uint8_t USB_Audio_SOF(USBD_HandleTypeDef *pdev);
 static uint8_t USB_Audio_IsoINIncomplete(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USB_Audio_IsoOUTIncomplete(USBD_HandleTypeDef *pdev, uint8_t epnum);
 
-static void AUDIO_REQ_GetCurrent(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req);
-static void AUDIO_REQ_SetCurrent(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req);
+static void AUDIO_REQ_Get(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req);
+static void AUDIO_REQ_Set(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req);
 static void *USB_Audio_GetAudioHeaderDesc(uint8_t *pConfDesc);
 
 
-USBD_ClassTypeDef USB_Audio_Class =
-{
+USBD_ClassTypeDef USB_Audio_Class = {
   .Init = USB_Audio_Init,
   .DeInit = USB_Audio_DeInit,
   .Setup = USB_Audio_Setup,
@@ -168,15 +193,16 @@ __attribute__((aligned(4))) = {
   /* 12 byte*/
 
   /* USB Speaker Audio Feature Unit Descriptor */
-  // 0x09,                               /* bLength */
-  // AUDIO_INTERFACE_DESCRIPTOR_TYPE,    /* bDescriptorType */
-  // AUDIO_CONTROL_FEATURE_UNIT,         /* bDescriptorSubtype */
-  // AUDIO_OUT_STREAMING_CTRL,           /* bUnitID */
-  // 0x01,                               /* bSourceID */
-  // 0x01,                               /* bControlSize */
-  // AUDIO_CONTROL_MUTE,                 /* bmaControls(0) */
-  // 0,                                  /* bmaControls(1) */
-  // 0x00,                               /* iTerminal */
+  0x09,                               /* bLength */
+  AUDIO_INTERFACE_DESCRIPTOR_TYPE,    /* bDescriptorType */
+  AUDIO_CONTROL_FEATURE_UNIT,         /* bDescriptorSubtype */
+  AUDIO_OUT_STREAMING_CTRL,           /* bUnitID */
+  0x01,                               /* bSourceID */
+  0x01,                               /* bControlSize */
+  AUDIO_CONTROL_VOLUME |              /* bmaControls(0) */
+      AUDIO_CONTROL_MUTE,
+  0,                                  /* bmaControls(1) */
+  0x00,                               /* iTerminal */
   /* 09 byte */
 
   /* USB Speaker Output Terminal Descriptor */
@@ -187,7 +213,7 @@ __attribute__((aligned(4))) = {
   0x01,                               /* wTerminalType "Speaker" (0x0301) */
   0x03,
   0x00,                               /* bAssocTerminal */
-  0x01,                               /* bSourceID */
+  AUDIO_OUT_STREAMING_CTRL,           /* bSourceID */
   0x00,                               /* iTerminal */
   /* 09 byte */
 
@@ -299,16 +325,18 @@ void __audio_data_received(USBD_HandleTypeDef *pdev, int16_t* buff, uint16_t siz
     intf->audio_data_received(buff, size);
 }
 
-void __set_volume(USBD_HandleTypeDef *pdev, uint8_t volume) {
+void __set_volume(USBD_HandleTypeDef *pdev) {
   USB_Audio_IntfTypeDef *intf = pdev->pUserData[pdev->classId];
-  if (intf != NULL && intf->set_volume != NULL)
-    intf->set_volume(volume);
+  USB_Audio_HandleTypeDef *inst = pdev->pClassDataCmsit[pdev->classId];
+  if (inst != NULL && intf != NULL && intf->set_volume != NULL)
+    intf->set_volume(inst->status.volume);
 }
 
-void __set_mute(USBD_HandleTypeDef *pdev, uint8_t mute) {
+void __set_mute(USBD_HandleTypeDef *pdev) {
   USB_Audio_IntfTypeDef *intf = pdev->pUserData[pdev->classId];
-  if (intf != NULL && intf->set_mute != NULL)
-    intf->set_mute(mute);
+  USB_Audio_HandleTypeDef *inst = pdev->pClassDataCmsit[pdev->classId];
+  if (inst != NULL && intf != NULL && intf->set_mute != NULL)
+    intf->set_mute(inst->status.mute);
 }
 
 void USB_Audio_RegisterInterface(USBD_HandleTypeDef *pdev, USB_Audio_IntfTypeDef *intf) {
@@ -369,9 +397,9 @@ static uint8_t USB_Audio_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *r
   uint16_t status_info = 0U;
   USBD_StatusTypeDef ret = USBD_OK;
 
-  #ifdef DEBUG
-  printf("%08lx Setup %02hx %02hx %04x %04x %04x\r\n", HAL_GetTick(), req->bmRequest, req->bRequest, req->wValue, req->wIndex, req->wLength);
-  #endif
+  // #ifdef DEBUG
+  // printf("%08lx Setup %02hx %02hx %04x %04x %04x\r\n", HAL_GetTick(), req->bmRequest, req->bRequest, req->wValue, req->wIndex, req->wLength);
+  // #endif
 
   instance = (USB_Audio_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId];
 
@@ -381,13 +409,13 @@ static uint8_t USB_Audio_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *r
 
   switch (req->bmRequest & USB_REQ_TYPE_MASK) {
     case USB_REQ_TYPE_CLASS:
-      switch (req->bRequest) {
-        case AUDIO_REQ_GET_CUR:
-          AUDIO_REQ_GetCurrent(pdev, req);
+      switch (req->bRequest & 0xF0) {
+        case AUDIO_REQ_GET:
+          AUDIO_REQ_Get(pdev, req);
           break;
 
-        case AUDIO_REQ_SET_CUR:
-          AUDIO_REQ_SetCurrent(pdev, req);
+        case AUDIO_REQ_SET:
+          AUDIO_REQ_Set(pdev, req);
           break;
 
         default:
@@ -516,22 +544,70 @@ static uint8_t USB_Audio_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum) {
 
 /* handles EP0 Rx Ready event */
 static uint8_t USB_Audio_EP0_RxReady(USBD_HandleTypeDef *pdev) {
-  USB_Audio_HandleTypeDef *instance;
-  instance = (USB_Audio_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId];
+  USB_Audio_HandleTypeDef *inst;
+  inst = (USB_Audio_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId];
 
-  if (instance == NULL) {
+  if (inst == NULL) {
     return (uint8_t)USBD_FAIL;
   }
 
-  if (instance->control.cmd == AUDIO_REQ_SET_CUR) {
-    /* In this driver, to simplify code, only SET_CUR request is managed */
-    switch (instance->control.unit) {
-    case AUDIO_OUT_STREAMING_CTRL:
-      __set_mute(pdev, instance->control.data[0]);
-      instance->control.cmd = 0U;
-      instance->control.len = 0U;
+  if (inst->control.unit_id != AUDIO_OUT_STREAMING_CTRL) {
+    Error_Handler();
+  }
+
+  switch (inst->control.selector) {
+  case AUDIO_CONTROL_MUTE:
+    // #ifdef DEBUG
+    // printf("mute %u", inst->control.len);
+    // #endif
+    switch (inst->control.reqest) {
+    case AUDIO_REQ_SET_CUR:
+      inst->status.mute = *inst->control.data;
+      // #ifdef DEBUG
+      // printf(" SET_CUR %hu\r\n", *inst->control.data);
+      // #endif
+      __set_mute(pdev);
       break;
+
+    default:
+      Error_Handler();
     }
+    break;
+
+  case AUDIO_CONTROL_VOLUME:
+    // #ifdef DEBUG
+    // printf("volume %u", inst->control.len);
+    // #endif
+    switch (inst->control.reqest) {
+    case AUDIO_REQ_SET_CUR:
+      inst->status.volume = *(int16_t*)inst->control.data;
+      // #ifdef DEBUG
+      // printf(" SET_CUR %d\r\n", *(int16_t*)inst->control.data);
+      // #endif
+      __set_volume(pdev);
+      break;
+
+    // #ifdef DEBUG
+    // case AUDIO_REQ_SET_MIN:
+    //   printf(" SET_MIN %d\r\n", *(int16_t*)inst->control.data);
+    //   break;
+
+    // case AUDIO_REQ_SET_MAX:
+    //   printf(" SET_MAX %d\r\n", *(int16_t*)inst->control.data);
+    //   break;
+
+    // case AUDIO_REQ_SET_RES:
+    //   printf(" SET_RES %d\r\n", *(int16_t*)inst->control.data);
+    //   break;
+    // #endif
+
+    default:
+      Error_Handler();
+    }
+    break;
+
+  default:
+    Error_Handler();
   }
 
   return (uint8_t)USBD_OK;
@@ -579,8 +655,8 @@ static uint8_t USB_Audio_IsoOUTIncomplete(USBD_HandleTypeDef *pdev, uint8_t epnu
 }
 
 
-/* Handles the GET_CUR Audio control request. */
-static void AUDIO_REQ_GetCurrent(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req) {
+/* Handles the Get Audio control request. */
+static void AUDIO_REQ_Get(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req) {
   USB_Audio_HandleTypeDef *instance;
   instance = (USB_Audio_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId];
 
@@ -590,12 +666,72 @@ static void AUDIO_REQ_GetCurrent(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef 
 
   memset(instance->control.data, 0, USB_MAX_EP0_SIZE);
 
+  switch (HIBYTE(req->wValue)) {
+  case MUTE_CONTROL:
+  #ifdef DEBUG
+  #endif
+    printf("mute %u", req->wLength);
+    switch (req->bRequest) {
+    case AUDIO_REQ_GET_CUR:
+  #ifdef DEBUG
+  #endif
+      printf(" GET_CUR %hu\r\n", instance->status.mute);
+      *instance->control.data = instance->status.mute;
+      break;
+
+    default:
+      Error_Handler();
+    }
+    break;
+
+  case VOLUME_CONTROL:
+    #ifdef DEBUG
+    printf("volume %u", req->wLength);
+    #endif
+    switch (req->bRequest) {
+    case AUDIO_REQ_GET_CUR:
+      #ifdef DEBUG
+      printf(" GET_CUR %d\r\n", instance->status.volume);
+      #endif
+      *(int16_t*)instance->control.data = instance->status.volume;
+      break;
+
+    case AUDIO_REQ_GET_MIN:
+      #ifdef DEBUG
+      printf(" GET_MIN -32767\r\n");
+      #endif
+      *(int16_t*)instance->control.data = -32767;
+      break;
+
+    case AUDIO_REQ_GET_MAX:
+      #ifdef DEBUG
+      printf(" GET_MAX 0\r\n");
+      #endif
+      *(int16_t*)instance->control.data = 0;
+      break;
+
+    case AUDIO_REQ_GET_RES:
+      #ifdef DEBUG
+      printf(" GET_RES 1\r\n");
+      #endif
+      *(int16_t*)instance->control.data = 1;
+      break;
+
+    default:
+      Error_Handler();
+    }
+    break;
+  
+  default:
+    Error_Handler();
+  }
+
   /* Send the current mute state */
   (void)USBD_CtlSendData(pdev, instance->control.data, MIN(req->wLength, USB_MAX_EP0_SIZE));
 }
 
-/* Handles the SET_CUR Audio control request. */
-static void AUDIO_REQ_SetCurrent(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req) {
+/* Handles the Set Audio control request. */
+static void AUDIO_REQ_Set(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req) {
   USB_Audio_HandleTypeDef *instance;
   instance = (USB_Audio_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId];
 
@@ -604,9 +740,10 @@ static void AUDIO_REQ_SetCurrent(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef 
   }
 
   if (req->wLength != 0U) {
-    instance->control.cmd = AUDIO_REQ_SET_CUR;     /* Set the request value */
-    instance->control.len = (uint8_t)MIN(req->wLength, USB_MAX_EP0_SIZE);  /* Set the request data length */
-    instance->control.unit = HIBYTE(req->wIndex);  /* Set the request target unit */
+    instance->control.reqest = req->bRequest;     /* request type */
+    instance->control.selector = HIBYTE(req->wValue); /* Control Selector */
+    instance->control.unit_id = HIBYTE(req->wIndex);  /* Feature Unit ID */
+    instance->control.len = MIN(req->wLength, USB_MAX_EP0_SIZE);  /* Set the request data length */
 
     /* Prepare the reception of the buffer over EP0 */
     (void)USBD_CtlPrepareRx(pdev, instance->control.data, instance->control.len);
