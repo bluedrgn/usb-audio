@@ -288,8 +288,8 @@ void _draw_filled_rectangle(microGL_canvas *canvas, int16_t left, int16_t top, i
   _byte_step_t step;
 
   step = _byte_step(canvas);
-  topleft = _page_byte_bit(canvas, top, left);
-  bottomleft = _page_byte_bit(canvas, bottom, left);
+  topleft = _page_byte_bit(canvas, left, top);
+  bottomleft = _page_byte_bit(canvas, left, bottom);
 
   if (canvas->bit_order == MICROGL_LSB_FIRST) {
     top_mask = top_byte_lsb_lut[topleft.bit];

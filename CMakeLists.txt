@@ -79,6 +79,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     SSD1306_I2C
     # GU128X32D
     I2S_audio_player
+    m
     # Add user defined libraries
 )
 

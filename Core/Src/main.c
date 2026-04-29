@@ -25,12 +25,13 @@
 #include "arm_math.h"
 #include "stm32f4xx_hal.h"
 // #include "fonts.h"
-// #include "visuals/image_VUmeter.h"
 #include "microGL.h"
 // #include "sh1106.h"
 #include "ssd1306.h"
 // #include "gu128x32d.h"
 #include "visuals/VUmeter.h"
+#include "visuals/waveform.h"
+// #include "visuals/bouncing_bars.h"
 #include "usb_audio_class.h"
 #include "audio_player.h"
 #include "usbd_core.h"
@@ -70,10 +71,18 @@ DMA_HandleTypeDef hdma_usart1_tx;
 /* USER CODE BEGIN PV */
 USBD_HandleTypeDef hUsbDevice;
 static uint8_t framebuffer[SSD1306_FB_SIZE * 2];
+static ssd1306_display_t display = {
+  .hi2c = &hi2c1,
+  .i2c_addr = SSD1306_I2C_ADDRESS_0,
+  .fb1 = framebuffer,
+  .fb2 = framebuffer + SSD1306_FB_SIZE,
+};
 static microGL_canvas screen;
 static AudioPlayer_HandleTypeDef speaker;
 static AUDIOSAMPLE_TYPE audiobuffer[768];
 static meter_instance_t VUmeter[2];
+waveform_TypeDef wave;
+waveform_minmax_t wave_buffer[128];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,12 +98,6 @@ static void USB_DEVICE_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-static ssd1306_display_t display = {
-  .hi2c = &hi2c1,
-  .i2c_addr = SSD1306_I2C_ADDRESS_0,
-  .fb1 = framebuffer,
-  .fb2 = framebuffer + SSD1306_FB_SIZE,
-};
 
 /* USER CODE END 0 */
 
@@ -104,7 +107,6 @@ static ssd1306_display_t display = {
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -143,8 +145,10 @@ int main(void)
   ssd1306_init(&display);
   microGL_init_canvas(&screen, SSD1306_SCR_W, SSD1306_SCR_H,
     MICROGL_SCANMODE_RIGHTDOWN, MICROGL_LSB_FIRST, &display.fbptr);
-  meter_init(&VUmeter[0], 3*PI/4, PI/4, 31, 0, 45);
-  meter_init(&VUmeter[1], 3*PI/4, PI/4, 96, 0, 45);
+  microGL_set_draw_mode(&screen, MICROGL_DRAWMODE_INV);
+  meter_init(&VUmeter[0], 3*PI/4, PI/4, 31, -13, 45);
+  meter_init(&VUmeter[1], 3*PI/4, PI/4, 96, -13, 45);
+  waveform_init(&wave, WAVEFORM_HORIZONTAL, 16, 128, 0, 47, 16, wave_buffer);
   audio_player_init(&speaker, &hi2s2, audiobuffer, ELMNUM(audiobuffer));
   USB_DEVICE_Init();
   /* USER CODE END 2 */
@@ -159,6 +163,7 @@ int main(void)
         microGL_clear(&screen, NULL);
         meter_draw_needle(&VUmeter[0], &screen);
         meter_draw_needle(&VUmeter[1], &screen);
+        waveform_draw(&wave, &screen);
         ssd1306_flush(&display);
       }
       else {
@@ -396,10 +401,12 @@ void stream_end() {
   audio_player_stop(&speaker);
 }
 
-#include "arm_math.h"
+
 void data_received(int16_t* buff, uint16_t size) {
-  float Lch[size/2], Rch[size/2];
   AudioSample_f32_t fbuff[size/2];
+  float Lch[size/2], Rch[size/2];
+  float mono[size/2];
+
   arm_q15_to_float(buff, (float*)fbuff, size);
 
   audio_player_enque_samples(&speaker, fbuff, size/2);
@@ -407,10 +414,12 @@ void data_received(int16_t* buff, uint16_t size) {
   for (size_t i = 0; i < size/2; i++) {
     Lch[i] = fbuff[i].L;
     Rch[i] = fbuff[i].R;
+    mono[i] = fbuff[i].L / 2 + fbuff[i].R / 2;
   }
 
   meter_update_VU(&VUmeter[0], Lch, size/2);
   meter_update_VU(&VUmeter[1], Rch, size/2);
+  waveform_update(&wave, mono, size/2);
 }
 
 void volume_change(int16_t volume) {
