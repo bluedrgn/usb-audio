@@ -25,12 +25,12 @@
 #include "arm_math.h"
 #include "stm32f4xx_hal.h"
 // #include "fonts.h"
-// #include "image_VUmeter.h"
+// #include "visuals/image_VUmeter.h"
 #include "microGL.h"
 // #include "sh1106.h"
 #include "ssd1306.h"
 // #include "gu128x32d.h"
-#include "VUmeter.h"
+#include "visuals/VUmeter.h"
 #include "usb_audio_class.h"
 #include "audio_player.h"
 #include "usbd_core.h"
@@ -70,6 +70,7 @@ DMA_HandleTypeDef hdma_usart1_tx;
 /* USER CODE BEGIN PV */
 USBD_HandleTypeDef hUsbDevice;
 static uint8_t framebuffer[SSD1306_FB_SIZE * 2];
+static microGL_canvas screen;
 static AudioPlayer_HandleTypeDef speaker;
 static AUDIOSAMPLE_TYPE audiobuffer[768];
 static meter_instance_t VUmeter[2];
@@ -95,14 +96,6 @@ static ssd1306_display_t display = {
   .fb2 = framebuffer + SSD1306_FB_SIZE,
 };
 
-static microGL_Framebuffer_t screen = {
-  .width = SSD1306_SCR_W,
-  .height = SSD1306_SCR_H,
-  .bit_order = MICROGL_LSB_FIRST,
-  .draw_mode = MICROGL_DM_PSET,
-  .scan_mode = MICROGL_SM_RD,
-  .buf_ptr = &display.fbptr
-};
 /* USER CODE END 0 */
 
 /**
@@ -148,9 +141,10 @@ int main(void)
   #endif
 
   ssd1306_init(&display);
-  meter_init(&VUmeter[0], 3*PI/4, PI/4, 48000U, 31, 0, 45);
-  meter_init(&VUmeter[1], 3*PI/4, PI/4, 48000U, 96, 0, 45);
-
+  microGL_init_canvas(&screen, SSD1306_SCR_W, SSD1306_SCR_H,
+    MICROGL_SCANMODE_RIGHTDOWN, MICROGL_LSB_FIRST, &display.fbptr);
+  meter_init(&VUmeter[0], 3*PI/4, PI/4, 31, 0, 45);
+  meter_init(&VUmeter[1], 3*PI/4, PI/4, 96, 0, 45);
   audio_player_init(&speaker, &hi2s2, audiobuffer, ELMNUM(audiobuffer));
   USB_DEVICE_Init();
   /* USER CODE END 2 */
@@ -163,8 +157,8 @@ int main(void)
     if (display_on) {
       if (speaker.playback == APLAYER_PLAY) {
         microGL_clear(&screen, NULL);
-        meter_draw_needle(&screen, &VUmeter[0]);
-        meter_draw_needle(&screen, &VUmeter[1]);
+        meter_draw_needle(&VUmeter[0], &screen);
+        meter_draw_needle(&VUmeter[1], &screen);
         ssd1306_flush(&display);
       }
       else {
@@ -393,6 +387,8 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 void stream_start(uint32_t sample_rate) {
+  meter_start(&VUmeter[0], sample_rate);
+  meter_start(&VUmeter[1], sample_rate);
   audio_player_start(&speaker, sample_rate);
 }
 

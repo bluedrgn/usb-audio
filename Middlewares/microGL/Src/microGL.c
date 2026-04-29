@@ -4,14 +4,13 @@
 #include <stdint.h>
 
 #define PAGE_HEIGHT (8)
-#define NO_PAGES (FB->height / PAGE_HEIGHT)
+#define NO_PAGES (canvas->height / PAGE_HEIGHT)
 #define PAGE_MAX (NO_PAGES - 1)
-#define FB_SIZE ((FB->width * FB->height) / PAGE_HEIGHT)
+#define canvas_SIZE ((canvas->width * canvas->height) / PAGE_HEIGHT)
 
 // #define SET_MASK(target_field, mask) (target_field) |= (mask)
 // #define CLEAR_MASK(target_field, mask) (target_field) &= ~(mask)
 // #define INVERT_MASK(target_field, mask) (target_field) ^= (mask)
-
 
 typedef struct {
   int16_t right;
@@ -25,79 +24,79 @@ typedef struct {
 } _page_byte_bit_t;
 
 
-static inline void __updateFB(microGL_Framebuffer_t *FB);
-static inline uint8_t _pages_total(microGL_Framebuffer_t *FB);
-static inline uint8_t _page(microGL_Framebuffer_t *FB, int16_t y);
-static inline uint16_t _buffer_size(microGL_Framebuffer_t *FB);
-static inline _byte_step_t _byte_step(microGL_Framebuffer_t *FB);
-static inline _page_byte_bit_t _page_byte_bit(microGL_Framebuffer_t *FB, int16_t x, int16_t y);
-static inline void _draw_vertical_line(microGL_Framebuffer_t *FB, int16_t x, int16_t top, int16_t bottom);
-static inline void _draw_horizontal_line(microGL_Framebuffer_t *FB, int16_t y, int16_t left, int16_t right);
-static inline void _set_pixel(microGL_Framebuffer_t *FB, int16_t x, int16_t y);
-static inline void _reset_pixel(microGL_Framebuffer_t *FB, int16_t x, int16_t y);
-static uint8_t _print_char(microGL_Framebuffer_t *FB, int16_t left, int16_t top, uint8_t character, const font_t *fnt);
-static void _draw_filled_rectangle(microGL_Framebuffer_t *FB, int16_t left, int16_t top, int16_t right, int16_t bottom);
-static void _draw_hollow_rectangle(microGL_Framebuffer_t *FB, int16_t left, int16_t top, int16_t right, int16_t bottom);
-static void _draw_byte_vertical(microGL_Framebuffer_t *FB, int16_t left, int16_t top, uint8_t byte);
-static void _draw_byte_horizontal(microGL_Framebuffer_t *FB, int16_t left, int16_t top, uint8_t byte);
-static inline void _mask_set(microGL_Framebuffer_t *FB, uint8_t *ptr, uint8_t mask);
-static inline void _mask_clear(microGL_Framebuffer_t *FB, uint8_t *ptr, uint8_t mask);
+static inline void __updatecanvas(microGL_canvas *canvas);
+static inline uint8_t _pages_total(microGL_canvas *canvas);
+static inline uint8_t _page(microGL_canvas *canvas, int16_t y);
+static inline uint16_t _buffer_size(microGL_canvas *canvas);
+static inline _byte_step_t _byte_step(microGL_canvas *canvas);
+static inline _page_byte_bit_t _page_byte_bit(microGL_canvas *canvas, int16_t x, int16_t y);
+static inline void _draw_vertical_line(microGL_canvas *canvas, int16_t x, int16_t top, int16_t bottom);
+static inline void _draw_horizontal_line(microGL_canvas *canvas, int16_t y, int16_t left, int16_t right);
+static inline void _set_pixel(microGL_canvas *canvas, int16_t x, int16_t y);
+static inline void _reset_pixel(microGL_canvas *canvas, int16_t x, int16_t y);
+static uint8_t _print_char(microGL_canvas *canvas, int16_t left, int16_t top, uint8_t character, const font_t *fnt);
+static void _draw_filled_rectangle(microGL_canvas *canvas, int16_t left, int16_t top, int16_t right, int16_t bottom);
+static void _draw_hollow_rectangle(microGL_canvas *canvas, int16_t left, int16_t top, int16_t right, int16_t bottom);
+static void _draw_byte_vertical(microGL_canvas *canvas, int16_t left, int16_t top, uint8_t byte);
+static void _draw_byte_horizontal(microGL_canvas *canvas, int16_t left, int16_t top, uint8_t byte);
+static inline void _mask_set(microGL_canvas *canvas, uint8_t *ptr, uint8_t mask);
+static inline void _mask_clear(microGL_canvas *canvas, uint8_t *ptr, uint8_t mask);
 
 
-inline void __updateFB(microGL_Framebuffer_t *FB) {
-  if (FB->buf_ptr != NULL) {
-    FB->buf = *(FB->buf_ptr);
+inline void __updatecanvas(microGL_canvas *canvas) {
+  if (canvas->buf_ptr != NULL) {
+    canvas->buf = *(canvas->buf_ptr);
   }
 }
 
-inline uint8_t _pages_total(microGL_Framebuffer_t *FB) {
-  return FB->height / PAGE_HEIGHT;
+inline uint8_t _pages_total(microGL_canvas *canvas) {
+  return canvas->height / PAGE_HEIGHT;
 }
 
-inline uint8_t _page(microGL_Framebuffer_t *FB, int16_t y) {
-  return (_pages_total(FB) - 1) - (y / PAGE_HEIGHT);
+inline uint8_t _page(microGL_canvas *canvas, int16_t y) {
+  return (_pages_total(canvas) - 1) - (y / PAGE_HEIGHT);
 }
 
-inline uint16_t _buffer_size(microGL_Framebuffer_t *FB) {
-  return (FB->width * _pages_total(FB));
+inline uint16_t _buffer_size(microGL_canvas *canvas) {
+  return (canvas->width * _pages_total(canvas));
 }
 
-inline _byte_step_t _byte_step(microGL_Framebuffer_t *FB) {
-  switch (FB->scan_mode) {
-  case MICROGL_SM_RD:
-    return (_byte_step_t){.down=FB->width, .right=1};
-  case MICROGL_SM_DR:
-    return (_byte_step_t){.down=1, .right=_pages_total(FB)};
-  case MICROGL_SM_LD:
-    return (_byte_step_t){.down=FB->width, .right=-1};
-  case MICROGL_SM_DL:
-    return (_byte_step_t){.down=1, .right=-_pages_total(FB)};
-  case MICROGL_SM_RU:
-    return (_byte_step_t){.down=-FB->width, .right=1};
-  case MICROGL_SM_UR:
-    return (_byte_step_t){.down=-1, .right=_pages_total(FB)};
-  case MICROGL_SM_LU:
-    return (_byte_step_t){.down=-FB->width, .right=-1};
-  case MICROGL_SM_UL:
-    return (_byte_step_t){.down=-1, .right=-_pages_total(FB)};
+inline _byte_step_t _byte_step(microGL_canvas *canvas) {
+  switch (canvas->scan_mode) {
+  case MICROGL_SCANMODE_RIGHTDOWN:
+    return (_byte_step_t){.down=canvas->width, .right=1};
+  case MICROGL_SCANMODE_DOWNRIGHT:
+    return (_byte_step_t){.down=1, .right=_pages_total(canvas)};
+  case MICROGL_SCANMODE_LEFTDOWN:
+    return (_byte_step_t){.down=canvas->width, .right=-1};
+  case MICROGL_SCANMODE_DOWNLEFT:
+    return (_byte_step_t){.down=1, .right=-_pages_total(canvas)};
+  case MICROGL_SCANMODE_RIGHTUP:
+    return (_byte_step_t){.down=-canvas->width, .right=1};
+  case MICROGL_SCANMODE_UPRIGHT:
+    return (_byte_step_t){.down=-1, .right=_pages_total(canvas)};
+  case MICROGL_SCANMODE_LEFTUP:
+    return (_byte_step_t){.down=-canvas->width, .right=-1};
+  case MICROGL_SCANMODE_UPLEFT:
+    return (_byte_step_t){.down=-1, .right=-_pages_total(canvas)};
   default:
     return (_byte_step_t){.down=0, .right=0};
   }
 }
 
-inline _page_byte_bit_t _page_byte_bit(microGL_Framebuffer_t *FB, int16_t x, int16_t y) {
+inline _page_byte_bit_t _page_byte_bit(microGL_canvas *canvas, int16_t x, int16_t y) {
   _page_byte_bit_t ret;
   _byte_step_t stp;
 
-  stp = _byte_step(FB);
-  ret.page = _page(FB, y);
+  stp = _byte_step(canvas);
+  ret.page = _page(canvas, y);
   ret.bit = y % PAGE_HEIGHT;
 
   if (stp.right >= 0) {
     ret.byte = (stp.right * x);
   }
   else {
-    ret.byte = _buffer_size(FB) + (stp.right * (x + 1));
+    ret.byte = _buffer_size(canvas) + (stp.right * (x + 1));
   }
 
   if (stp.down >= 0) {
@@ -105,37 +104,49 @@ inline _page_byte_bit_t _page_byte_bit(microGL_Framebuffer_t *FB, int16_t x, int
   }
   else {
     /* TODO to check */
-    ret.byte += (_pages_total(FB) - 1) + (stp.down * ret.page);
+    ret.byte += (_pages_total(canvas) - 1) + (stp.down * ret.page);
   }
   
   return ret;
 }
 
-void microGL_clear(microGL_Framebuffer_t *FB, const uint8_t *bg_img) {
-  __updateFB(FB);
-  
-  if (bg_img == NULL)
-    memset(FB->buf, 0, _buffer_size(FB));
-  else
-    memcpy(FB->buf, bg_img, _buffer_size(FB));
+void microGL_init_canvas( microGL_canvas *canvas, uint16_t width,
+  uint16_t height, microGL_scanmode_t scan_mode, microGL_bitorder_t bit_order,
+  uint8_t **buf_ptr) {
+  canvas->draw_mode = MICROGL_DRAWMODE_SET;
+  canvas->scan_mode = scan_mode;
+  canvas->bit_order = bit_order;
+  canvas->width = width;
+  canvas->height = height;
+  canvas->buf = NULL;
+  canvas->buf_ptr = buf_ptr;
 }
 
-void microGL_set_draw_mode(microGL_Framebuffer_t *FB, microGL_draw_mode_t draw_mode) {
+void microGL_clear(microGL_canvas *canvas, const uint8_t *bg_img) {
+  __updatecanvas(canvas);
+  
+  if (bg_img == NULL)
+    memset(canvas->buf, 0, _buffer_size(canvas));
+  else
+    memcpy(canvas->buf, bg_img, _buffer_size(canvas));
+}
+
+void microGL_set_draw_mode(microGL_canvas *canvas, microGL_drawmode_t draw_mode) {
   switch (draw_mode) {
-  case MICROGL_DM_PSET:
-  case MICROGL_DM_PRES:
-  case MICROGL_DM_PINV:
-    FB->draw_mode = draw_mode;
+  case MICROGL_DRAWMODE_SET:
+  case MICROGL_DRAWMODE_RES:
+  case MICROGL_DRAWMODE_INV:
+    canvas->draw_mode = draw_mode;
     break;
   default:
     break;
   }
 }
 
-void microGL_draw_horizontal_line(microGL_Framebuffer_t *FB, int16_t x1, int16_t x2, int16_t y) {
+void microGL_draw_horizontal_line(microGL_canvas *canvas, int16_t x1, int16_t x2, int16_t y) {
   int16_t left, right;
 
-  __updateFB(FB);
+  __updatecanvas(canvas);
   
   if (x2 >= x1) {
     left = x1;
@@ -145,13 +156,13 @@ void microGL_draw_horizontal_line(microGL_Framebuffer_t *FB, int16_t x1, int16_t
     right = x1;
   }
 
-  _draw_horizontal_line(FB, y, left, right);
+  _draw_horizontal_line(canvas, y, left, right);
 }
 
-void microGL_draw_vertical_line(microGL_Framebuffer_t *FB, int16_t x, int16_t y1, int16_t y2) {
+void microGL_draw_vertical_line(microGL_canvas *canvas, int16_t x, int16_t y1, int16_t y2) {
   int16_t top, bottom;
 
-  __updateFB(FB);
+  __updatecanvas(canvas);
   
   if (y2 >= y1) {
     bottom = y1;
@@ -161,10 +172,10 @@ void microGL_draw_vertical_line(microGL_Framebuffer_t *FB, int16_t x, int16_t y1
     top = y1;
   }
 
-  _draw_vertical_line(FB, x, top, bottom);
+  _draw_vertical_line(canvas, x, top, bottom);
 }
 
-void microGL_draw_line(microGL_Framebuffer_t *FB, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void microGL_draw_line(microGL_canvas *canvas, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
   int16_t dx = x2 - x1;
   int16_t dy = y2 - y1;
   int16_t dx2;
@@ -173,14 +184,14 @@ void microGL_draw_line(microGL_Framebuffer_t *FB, int16_t x1, int16_t y1, int16_
   int8_t dx_sym = (dx > 0) ? 1 : -1;
   int8_t dy_sym = (dy > 0) ? 1 : -1;
 
-  __updateFB(FB);
+  __updatecanvas(canvas);
   
   if (dx == 0) {
-    microGL_draw_vertical_line(FB, x1, y1, y2);
+    microGL_draw_vertical_line(canvas, x1, y1, y2);
     return;
   }
   if (dy == 0) {
-    microGL_draw_horizontal_line(FB, x1, x2, y1);
+    microGL_draw_horizontal_line(canvas, x1, x2, y1);
     return;
   }
 
@@ -192,7 +203,7 @@ void microGL_draw_line(microGL_Framebuffer_t *FB, int16_t x1, int16_t y1, int16_
   if (dx >= dy) {
     di = dy2 - dx;
     while (x1 != x2) {
-      microGL_set_pixel(FB, x1, y1);
+      microGL_set_pixel(canvas, x1, y1);
       x1 += dx_sym;
       if (di < 0) {
         di = di + dy2;
@@ -204,7 +215,7 @@ void microGL_draw_line(microGL_Framebuffer_t *FB, int16_t x1, int16_t y1, int16_
   } else {
     di = (int16_t)(dx2 - dy);
     while (y1 != y2) {
-      microGL_set_pixel(FB, x1, y1);
+      microGL_set_pixel(canvas, x1, y1);
       y1 += dy_sym;
       if (di < 0) {
         di = (int16_t)(di + dx2);
@@ -215,13 +226,13 @@ void microGL_draw_line(microGL_Framebuffer_t *FB, int16_t x1, int16_t y1, int16_
     }
   }
 
-  microGL_set_pixel(FB, x1, y1);
+  microGL_set_pixel(canvas, x1, y1);
 }
 
-void microGL_draw_rectangle(microGL_Framebuffer_t *FB, int16_t x1, int16_t y1, int16_t x2, int16_t y2, bool filled) {
+void microGL_draw_rectangle(microGL_canvas *canvas, int16_t x1, int16_t y1, int16_t x2, int16_t y2, bool filled) {
   int16_t left, top, right, bottom;
 
-  __updateFB(FB);
+  __updatecanvas(canvas);
   
   if (x2 >= x1) {
     left = x1;
@@ -245,24 +256,24 @@ void microGL_draw_rectangle(microGL_Framebuffer_t *FB, int16_t x1, int16_t y1, i
       left = 0;
     if (bottom < 0)
       bottom = 0;
-    if (top >= FB->height)
-      top = FB->height - 1;
-    if (right >= FB->width)
-      right = FB->width - 1;
-    _draw_filled_rectangle(FB, left, top, right, bottom);
+    if (top >= canvas->height)
+      top = canvas->height - 1;
+    if (right >= canvas->width)
+      right = canvas->width - 1;
+    _draw_filled_rectangle(canvas, left, top, right, bottom);
   } else {
-    _draw_hollow_rectangle(FB, left, top, right, bottom);
+    _draw_hollow_rectangle(canvas, left, top, right, bottom);
   }
 }
 
-void _draw_hollow_rectangle(microGL_Framebuffer_t *FB, int16_t left, int16_t top, int16_t right, int16_t bottom) {
-  _draw_horizontal_line(FB, top, left, right - 1);
-  _draw_vertical_line(FB, left, top - 1, bottom);
-  _draw_vertical_line(FB, right, top, bottom + 1);
-  _draw_horizontal_line(FB, bottom, left + 1, right);
+void _draw_hollow_rectangle(microGL_canvas *canvas, int16_t left, int16_t top, int16_t right, int16_t bottom) {
+  _draw_horizontal_line(canvas, top, left, right - 1);
+  _draw_vertical_line(canvas, left, top - 1, bottom);
+  _draw_vertical_line(canvas, right, top, bottom + 1);
+  _draw_horizontal_line(canvas, bottom, left + 1, right);
 }
 
-void _draw_filled_rectangle(microGL_Framebuffer_t *FB, int16_t left, int16_t top, int16_t right, int16_t bottom) {
+void _draw_filled_rectangle(microGL_canvas *canvas, int16_t left, int16_t top, int16_t right, int16_t bottom) {
   static const uint8_t bottom_byte_lsb_lut[PAGE_HEIGHT] =
     {0xFF, 0x7F, 0x3F, 0x1F, 0x0F, 0x07, 0x03, 0x01};
   static const uint8_t top_byte_lsb_lut[PAGE_HEIGHT] =
@@ -276,11 +287,11 @@ void _draw_filled_rectangle(microGL_Framebuffer_t *FB, int16_t left, int16_t top
   _page_byte_bit_t topleft, bottomleft;
   _byte_step_t step;
 
-  step = _byte_step(FB);
-  topleft = _page_byte_bit(FB, top, left);
-  bottomleft = _page_byte_bit(FB, bottom, left);
+  step = _byte_step(canvas);
+  topleft = _page_byte_bit(canvas, top, left);
+  bottomleft = _page_byte_bit(canvas, bottom, left);
 
-  if (FB->bit_order == MICROGL_LSB_FIRST) {
+  if (canvas->bit_order == MICROGL_LSB_FIRST) {
     top_mask = top_byte_lsb_lut[topleft.bit];
     bottom_mask = bottom_byte_lsb_lut[bottomleft.bit];
   }
@@ -293,21 +304,21 @@ void _draw_filled_rectangle(microGL_Framebuffer_t *FB, int16_t left, int16_t top
     top_mask &= bottom_mask;
   }
 
-  ptr = &(FB->buf)[topleft.byte];
-  switch (FB->draw_mode) {
-  case MICROGL_DM_PSET:
+  ptr = &(canvas->buf)[topleft.byte];
+  switch (canvas->draw_mode) {
+  case MICROGL_DRAWMODE_SET:
     for (uint8_t x = left; x <= right; x++) {
       (*ptr) |= (top_mask);
       ptr += step.right;
     }
     break;
-  case MICROGL_DM_PRES:
+  case MICROGL_DRAWMODE_RES:
     for (uint8_t x = left; x <= right; x++) {
       (*ptr) &= ~(top_mask);
       ptr += step.right;
     }
     break;
-  case MICROGL_DM_PINV:
+  case MICROGL_DRAWMODE_INV:
     for (uint8_t x = left; x <= right; x++) {
       (*ptr) ^= (top_mask);
       ptr += step.right;
@@ -323,21 +334,21 @@ void _draw_filled_rectangle(microGL_Framebuffer_t *FB, int16_t left, int16_t top
 
   i = 1;
   for (uint8_t page = topleft.page + 1; page < bottomleft.page; page++, i++) {
-    ptr = &(FB->buf)[topleft.byte + (i * step.down)];
-    switch (FB->draw_mode) {
-    case MICROGL_DM_PSET:
+    ptr = &(canvas->buf)[topleft.byte + (i * step.down)];
+    switch (canvas->draw_mode) {
+    case MICROGL_DRAWMODE_SET:
       for (uint8_t x = left; x <= right; x++) {
         *ptr = 0xFF;
         ptr += step.right;
       }
       break;
-    case MICROGL_DM_PRES:
+    case MICROGL_DRAWMODE_RES:
       for (uint8_t x = left; x <= right; x++) {
         *ptr = 0x00;
         ptr += step.right;
       }
       break;
-    case MICROGL_DM_PINV:
+    case MICROGL_DRAWMODE_INV:
       for (uint8_t x = left; x <= right; x++) {
         *ptr = ~(*ptr);
         ptr += step.right;
@@ -348,21 +359,21 @@ void _draw_filled_rectangle(microGL_Framebuffer_t *FB, int16_t left, int16_t top
     }
   }
 
-  ptr = &(FB->buf)[bottomleft.byte];
-  switch (FB->draw_mode) {
-  case MICROGL_DM_PSET:
+  ptr = &(canvas->buf)[bottomleft.byte];
+  switch (canvas->draw_mode) {
+  case MICROGL_DRAWMODE_SET:
     for (uint8_t x = left; x <= right; x++) {
       *ptr |= bottom_mask;
       ptr += step.right;
     }
     break;
-  case MICROGL_DM_PRES:
+  case MICROGL_DRAWMODE_RES:
     for (uint8_t x = left; x <= right; x++) {
       *ptr &= ~bottom_mask;
       ptr += step.right;
     }
     break;
-  case MICROGL_DM_PINV:
+  case MICROGL_DRAWMODE_INV:
     for (uint8_t x = left; x <= right; x++) {
       *ptr ^= bottom_mask;
       ptr += step.right;
@@ -373,14 +384,14 @@ void _draw_filled_rectangle(microGL_Framebuffer_t *FB, int16_t left, int16_t top
   }
 }
 
-void microGL_draw_circle(microGL_Framebuffer_t *FB, int16_t center_x, int16_t center_y, int16_t radius) {
+void microGL_draw_circle(microGL_canvas *canvas, int16_t center_x, int16_t center_y, int16_t radius) {
   int16_t err = (int16_t)(1 - radius);
   int16_t dx = 0;
   int16_t dy = (int16_t)(-2 * radius);
   int16_t x = 0;
   int16_t y = radius;
 
-  __updateFB(FB);
+  __updatecanvas(canvas);
   
   while (x < y) {
     if (err >= 0) {
@@ -392,140 +403,140 @@ void microGL_draw_circle(microGL_Framebuffer_t *FB, int16_t center_x, int16_t ce
     err = (int16_t)(err + dx + 1);
     x++;
 
-    microGL_set_pixel(FB, (center_x + x), (center_y + y));
-    microGL_set_pixel(FB, (center_x + x), (center_y - y));
-    microGL_set_pixel(FB, (center_x - x), (center_y + y));
-    microGL_set_pixel(FB, (center_x - x), (center_y - y));
-    microGL_set_pixel(FB, (center_x + y), (center_y + x));
-    microGL_set_pixel(FB, (center_x + y), (center_y - x));
-    microGL_set_pixel(FB, (center_x - y), (center_y + x));
-    microGL_set_pixel(FB, (center_x - y), (center_y - x));
+    microGL_set_pixel(canvas, (center_x + x), (center_y + y));
+    microGL_set_pixel(canvas, (center_x + x), (center_y - y));
+    microGL_set_pixel(canvas, (center_x - x), (center_y + y));
+    microGL_set_pixel(canvas, (center_x - x), (center_y - y));
+    microGL_set_pixel(canvas, (center_x + y), (center_y + x));
+    microGL_set_pixel(canvas, (center_x + y), (center_y - x));
+    microGL_set_pixel(canvas, (center_x - y), (center_y + x));
+    microGL_set_pixel(canvas, (center_x - y), (center_y - x));
   }
 
-  microGL_set_pixel(FB, center_x + radius, center_y);
-  microGL_set_pixel(FB, center_x - radius, center_y);
-  microGL_set_pixel(FB, center_x, center_y + radius);
-  microGL_set_pixel(FB, center_x, center_y - radius);
+  microGL_set_pixel(canvas, center_x + radius, center_y);
+  microGL_set_pixel(canvas, center_x - radius, center_y);
+  microGL_set_pixel(canvas, center_x, center_y + radius);
+  microGL_set_pixel(canvas, center_x, center_y - radius);
 }
 
-void microGL_draw_bitmap(microGL_Framebuffer_t *FB, const uint8_t *bmp, int16_t top, int16_t left, int16_t width, int16_t height) {
-  __updateFB(FB);
+void microGL_draw_bitmap(microGL_canvas *canvas, const uint8_t *bmp, int16_t top, int16_t left, int16_t width, int16_t height) {
+  __updatecanvas(canvas);
   
   for (int16_t y_pos = top; y_pos < top + height; y_pos += PAGE_HEIGHT) {
     for (int16_t x_pos = left; x_pos < left + width; x_pos++) {
       if (*bmp != 0) {
-        _draw_byte_vertical(FB, y_pos, x_pos, *bmp);
+        _draw_byte_vertical(canvas, y_pos, x_pos, *bmp);
       }
       bmp++;
     }
   }
 }
 
-int16_t microGL_print_text(microGL_Framebuffer_t *FB, const uint8_t *str, int16_t left, int16_t top, const font_t *font) {
+int16_t microGL_print_text(microGL_canvas *canvas, const uint8_t *str, int16_t left, int16_t top, const font_t *font) {
   if (str == NULL) {
     return 0;
   }
 
-  __updateFB(FB);
+  __updatecanvas(canvas);
   
-  int16_t width_limit = (FB->width - font->width - 1);
+  int16_t width_limit = (canvas->width - font->width - 1);
 
   while (*str != '\0' && left < width_limit) {
-    left += _print_char(FB, left, top, *str, font);
+    left += _print_char(canvas, left, top, *str, font);
     str++;
   }
 
-  return left >= FB->width ? FB->width - 1 : left;
+  return left >= canvas->width ? canvas->width - 1 : left;
 }
 
-void microGL_set_pixel(microGL_Framebuffer_t *FB, int16_t x, int16_t y) {
+void microGL_set_pixel(microGL_canvas *canvas, int16_t x, int16_t y) {
   /* sanity check */
-  if ((x < 0) || (y < 0) || (x >= FB->width) || (y >= FB->height)) {
+  if ((x < 0) || (y < 0) || (x >= canvas->width) || (y >= canvas->height)) {
     return;
   }
-  __updateFB(FB);
-  _set_pixel(FB, x, y);
+  __updatecanvas(canvas);
+  _set_pixel(canvas, x, y);
 }
 
-inline void _set_pixel(microGL_Framebuffer_t *FB, int16_t x, int16_t y) {
+inline void _set_pixel(microGL_canvas *canvas, int16_t x, int16_t y) {
   _page_byte_bit_t pix;
   uint8_t mask, *ptr;
 
-  pix =  _page_byte_bit(FB, x, y);
-  ptr = &(FB->buf)[pix.byte];
-  if (FB->bit_order == MICROGL_LSB_FIRST) {
+  pix =  _page_byte_bit(canvas, x, y);
+  ptr = &(canvas->buf)[pix.byte];
+  if (canvas->bit_order == MICROGL_LSB_FIRST) {
     mask = 0x80 >> pix.bit;
   }
   else {
     mask = 0x01 << pix.bit;
   }
 
-  _mask_set(FB, ptr, mask);
+  _mask_set(canvas, ptr, mask);
 }
 
-void microGL_reset_pixel(microGL_Framebuffer_t *FB, int16_t x, int16_t y) {
+void microGL_reset_pixel(microGL_canvas *canvas, int16_t x, int16_t y) {
   /* sanity check */
-  if ((x < 0) || (y < 0) || (x >= FB->width) || (y >= FB->height)) {
+  if ((x < 0) || (y < 0) || (x >= canvas->width) || (y >= canvas->height)) {
     return;
   }
-  __updateFB(FB);
-  _reset_pixel(FB, x, y);
+  __updatecanvas(canvas);
+  _reset_pixel(canvas, x, y);
 }
 
-inline void _reset_pixel(microGL_Framebuffer_t *FB, int16_t x, int16_t y) {
+inline void _reset_pixel(microGL_canvas *canvas, int16_t x, int16_t y) {
   _page_byte_bit_t pix;
   uint8_t mask, *ptr;
 
-  pix =  _page_byte_bit(FB, x, y);
-  ptr = &(FB->buf)[pix.byte];
-  if (FB->bit_order == MICROGL_LSB_FIRST) {
+  pix =  _page_byte_bit(canvas, x, y);
+  ptr = &(canvas->buf)[pix.byte];
+  if (canvas->bit_order == MICROGL_LSB_FIRST) {
     mask = 0x80 >> pix.bit;
   }
   else {
     mask = 0x01 << pix.bit;
   }
 
-  _mask_clear(FB, ptr, mask);
+  _mask_clear(canvas, ptr, mask);
 }
 
-inline void _draw_horizontal_line(microGL_Framebuffer_t *FB, int16_t y, int16_t left, int16_t right) {
-  _draw_filled_rectangle(FB, left, y, right, y);
+inline void _draw_horizontal_line(microGL_canvas *canvas, int16_t y, int16_t left, int16_t right) {
+  _draw_filled_rectangle(canvas, left, y, right, y);
 }
 
-inline void _draw_vertical_line(microGL_Framebuffer_t *FB, int16_t x, int16_t top, int16_t bottom) {
-  _draw_filled_rectangle(FB, x, top, x, bottom);
+inline void _draw_vertical_line(microGL_canvas *canvas, int16_t x, int16_t top, int16_t bottom) {
+  _draw_filled_rectangle(canvas, x, top, x, bottom);
 }
 
-inline void _mask_set(microGL_Framebuffer_t *FB, uint8_t *ptr, uint8_t mask) {
-  switch (FB->draw_mode) {
-  case MICROGL_DM_PSET:
+inline void _mask_set(microGL_canvas *canvas, uint8_t *ptr, uint8_t mask) {
+  switch (canvas->draw_mode) {
+  case MICROGL_DRAWMODE_SET:
   default:
     *ptr |= mask;
     break;
-  case MICROGL_DM_PRES:
+  case MICROGL_DRAWMODE_RES:
     *ptr &= ~mask;
     break;
-  case MICROGL_DM_PINV:
+  case MICROGL_DRAWMODE_INV:
     *ptr ^= mask;
     break;
   }
 }
 
-inline void _mask_clear(microGL_Framebuffer_t *FB, uint8_t *ptr, uint8_t mask) {
-  switch (FB->draw_mode) {
-  case MICROGL_DM_PSET:
+inline void _mask_clear(microGL_canvas *canvas, uint8_t *ptr, uint8_t mask) {
+  switch (canvas->draw_mode) {
+  case MICROGL_DRAWMODE_SET:
   default:
     *ptr &= ~mask;
     break;
-  case MICROGL_DM_PRES:
+  case MICROGL_DRAWMODE_RES:
     *ptr |= mask;
     break;
-  case MICROGL_DM_PINV:
+  case MICROGL_DRAWMODE_INV:
     break;
   }
 }
 
-static uint8_t _print_char(microGL_Framebuffer_t *FB, int16_t left, int16_t top, uint8_t character, const font_t *fnt) {
+static uint8_t _print_char(microGL_canvas *canvas, int16_t left, int16_t top, uint8_t character, const font_t *fnt) {
   const uint8_t *char_bmp;
   int16_t right;
   int16_t bottom;
@@ -540,17 +551,17 @@ static uint8_t _print_char(microGL_Framebuffer_t *FB, int16_t left, int16_t top,
 
     if (fnt->height <= 8) {
       for (right = left + fnt->width; left < right; left++) {
-        _draw_byte_vertical(FB, left, top, *char_bmp);
+        _draw_byte_vertical(canvas, left, top, *char_bmp);
         char_bmp++;
       }
-      _draw_byte_vertical(FB, left, top, 0);
+      _draw_byte_vertical(canvas, left, top, 0);
       break;
     }
 
     for (right = left + fnt->width; left < right; left++) {
       for (bottom = top + fnt->height; top > bottom; top += 8) {
         if (*char_bmp != 0) {
-          _draw_byte_vertical(FB, left, top, *char_bmp);
+          _draw_byte_vertical(canvas, left, top, *char_bmp);
         }
         char_bmp++;
       }
@@ -562,7 +573,7 @@ static uint8_t _print_char(microGL_Framebuffer_t *FB, int16_t left, int16_t top,
 
     if (fnt->width <= 8) {
       for (bottom = top - fnt->height; top > bottom; top--) {
-        _draw_byte_horizontal(FB, left, top, *char_bmp);
+        _draw_byte_horizontal(canvas, left, top, *char_bmp);
         char_bmp++;
       }
       break;
@@ -571,7 +582,7 @@ static uint8_t _print_char(microGL_Framebuffer_t *FB, int16_t left, int16_t top,
     for (bottom = top + fnt->height; top > bottom; top--) {
       for (right = left + fnt->width; left < right; left += 8) {
         if (*char_bmp != 0) {
-          _draw_byte_horizontal(FB, left, top, *char_bmp);
+          _draw_byte_horizontal(canvas, left, top, *char_bmp);
         }
         char_bmp++;
       }
@@ -594,38 +605,38 @@ static inline uint8_t _bitreverse(uint8_t n) {
    return (lut[n&0xf] << 4) | lut[n>>4];
 }
 
-void _draw_byte_vertical(microGL_Framebuffer_t *FB, int16_t x, int16_t top, uint8_t byte) {
+void _draw_byte_vertical(microGL_canvas *canvas, int16_t x, int16_t top, uint8_t byte) {
   _page_byte_bit_t pix;
   _byte_step_t stp;
   uint8_t *ptr;
 
-  if (FB->bit_order == MICROGL_MSB_FIRST) {
+  if (canvas->bit_order == MICROGL_MSB_FIRST) {
     byte = _bitreverse(byte);
   }
 
-  stp = _byte_step(FB);
-  pix = _page_byte_bit(FB, x, top);
+  stp = _byte_step(canvas);
+  pix = _page_byte_bit(canvas, x, top);
 
-  ptr = &(FB->buf)[pix.byte];
+  ptr = &(canvas->buf)[pix.byte];
 
   if (pix.bit == 7) {
-    _mask_set(FB, ptr, byte);
-    _mask_clear(FB, ptr, ~byte);
+    _mask_set(canvas, ptr, byte);
+    _mask_clear(canvas, ptr, ~byte);
   } else {
-    _mask_set(FB, ptr, byte << (7 - pix.bit));
-    _mask_clear(FB, ptr, (~byte) << (7 - pix.bit));
-    _mask_set(FB, ptr + stp.down, byte >> (pix.bit + 1));
-    _mask_clear(FB, ptr + stp.down, (~byte) >> (pix.bit + 1));
+    _mask_set(canvas, ptr, byte << (7 - pix.bit));
+    _mask_clear(canvas, ptr, (~byte) << (7 - pix.bit));
+    _mask_set(canvas, ptr + stp.down, byte >> (pix.bit + 1));
+    _mask_clear(canvas, ptr + stp.down, (~byte) >> (pix.bit + 1));
   }
 }
 
-void _draw_byte_horizontal(microGL_Framebuffer_t *FB, int16_t left, int16_t y, uint8_t byte) {
-  for (int16_t x = left; (x < (left + 8)) && (x < FB->width); x++, byte >>= 1) {
+void _draw_byte_horizontal(microGL_canvas *canvas, int16_t left, int16_t y, uint8_t byte) {
+  for (int16_t x = left; (x < (left + 8)) && (x < canvas->width); x++, byte >>= 1) {
     if (x < 0) continue;
     if (byte & 0x01) {
-      _set_pixel(FB, x, y);
+      _set_pixel(canvas, x, y);
     } else {
-      _reset_pixel(FB, x, y);
+      _reset_pixel(canvas, x, y);
     }
   }
 }

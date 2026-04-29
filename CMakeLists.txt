@@ -52,8 +52,9 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Core/Src/usb_audio_class.c
-    Core/Src/image_VUmeter_BG.c
-    Core/Src/VUmeter.c
+    Core/Src/visuals/VUmeter.c
+    Core/Src/visuals/bouncing_bars.c
+    Core/Src/visuals/waveform.c
 )
 
 # Add include paths

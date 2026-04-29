@@ -697,10 +697,11 @@ static void AUDIO_REQ_Get(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req) {
       break;
 
     case AUDIO_REQ_GET_MIN:
+      /* 20×log(2^-15) ~ -90.309 dB */
       #ifdef DEBUG
-      printf(" GET_MIN -32767\r\n");
+      printf(" GET_MIN -23119\r\n");
       #endif
-      *(int16_t*)instance->control.data = -32767;
+      *(int16_t*)instance->control.data = -23119;
       break;
 
     case AUDIO_REQ_GET_MAX:
