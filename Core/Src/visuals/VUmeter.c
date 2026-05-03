@@ -24,10 +24,6 @@
 #define CLAMP(x, min, max) (MAX((min), MIN((max), (x))))
 #endif
 
-#ifdef PI
-#undef PI
-#endif
-static const float PI = M_PI;
 
 /** https://en.wikipedia.org/wiki/VU_meter */
 

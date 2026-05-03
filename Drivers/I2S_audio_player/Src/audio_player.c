@@ -7,7 +7,7 @@
 #include "arm_math.h"
 #include <math.h>
 #include <stddef.h>
-#ifdef DEBUG
+#ifdef DEBUG_PRINT
 #include <stdio.h>
 #endif /*DEBUG*/
 #include <stdint.h>
@@ -56,7 +56,7 @@ void audio_player_stop(AudioPlayer_HandleTypeDef *player) {
 void audio_player_enque_samples(AudioPlayer_HandleTypeDef *player, AudioSample_f32_t *buffer, size_t buffer_size) {
   AudioSample_f32_t tmp_in[buffer_size+4];
 
-  #ifdef DEBUG
+  #ifdef DEBUG_PRINT
   // printf("  Enqueue %p %u\r\n", buff, size);
   if (player == NULL || buffer == NULL || buffer_size == 0)
     Error_Handler();
@@ -131,7 +131,7 @@ void audio_player_sync(AudioPlayer_HandleTypeDef *player) {
 
   if (player->playback == APLAYER_STOP) {
     __stop(player);
-    // #ifdef DEBUG
+    // #ifdef DEBUG_PRINT
     // HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
     // #endif
     return;
@@ -145,7 +145,7 @@ void audio_player_sync(AudioPlayer_HandleTypeDef *player) {
     player->stretch.amount = (offset+(player->sync_unit-1))/player->sync_unit;
   }
 
-  // #ifdef DEBUG
+  // #ifdef DEBUG_PRINT
   // printf("%08lX Sync %+5d %+5d\r", HAL_GetTick(), offset, player->stretch.amount);
   // if (player->playback == APLAYER_RESET) {
   //   putchar('\n');
@@ -165,7 +165,7 @@ void audio_player_set_volume(AudioPlayer_HandleTypeDef *player, int16_t volume) 
   else
     player->scaleFactor = powf(10.0f, (player->volume / 256.0f) / 20.0f);
 
-  #ifdef DEBUG
+  #ifdef DEBUG_PRINT
   printf("Volume set to %+.3f dB (%.3f %%)\r\n", (player->volume / 256.0f), (player->scaleFactor * 100.0f));
   #endif
 }

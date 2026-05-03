@@ -6,6 +6,9 @@
  */
 
 #include "visuals/waveform.h"
+#include "filter_helpers.h"
+#include "dsp/filtering_functions.h"
+#include "dsp/support_functions.h"
 #include "microGL.h"
 #include <math.h>
 #include <stddef.h>
@@ -27,9 +30,18 @@ void waveform_init(waveform_TypeDef *wf, waveform_orientation orient,
   wf->scale_remainder = 0;
 }
 
+void waveform_start(waveform_TypeDef *wf, uint32_t sample_rate) {
+  arm_fill_f32(0.0f, wf->LPF_pState, 4);
+  second_order_lowpass(wf->LPF_pCoeffs, (float)sample_rate / (float)wf->scale, (float)sample_rate, M_SQRT1_2);
+}
+
 void waveform_update(waveform_TypeDef *wf, float *buf, size_t size) {
-  for(; size > 0; size--, buf++) {
-    int16_t sample = roundf(*buf * wf->amplitude);
+  float input[size];
+  arm_biquad_casd_df1_inst_f32 LPF = {.numStages = 1, .pCoeffs = wf->LPF_pCoeffs, .pState = wf->LPF_pState};
+  arm_biquad_cascade_df1_f32(&LPF, buf, input, size);
+
+  for(size_t i = 0; i < size; i++) {
+    int16_t sample = roundf(input[i] * wf->amplitude);
 
     if (wf->scale_remainder == 0) {
       wf->w_ptr++;

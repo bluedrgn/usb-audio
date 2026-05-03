@@ -22,7 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
-#include "arm_math.h"
+#include "dsp/support_functions.h"
 #include "stm32f4xx_hal.h"
 // #include "fonts.h"
 #include "microGL.h"
@@ -31,14 +31,13 @@
 // #include "gu128x32d.h"
 #include "visuals/VUmeter.h"
 #include "visuals/waveform.h"
-// #include "visuals/bouncing_bars.h"
+#include "visuals/bouncing_bars.h"
 #include "usb_audio_class.h"
 #include "audio_player.h"
 #include "usbd_core.h"
 #include "usbd_desc.h"
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 /* USER CODE END Includes */
@@ -83,6 +82,7 @@ static AUDIOSAMPLE_TYPE audiobuffer[768];
 static meter_instance_t VUmeter[2];
 waveform_TypeDef wave;
 waveform_minmax_t wave_buffer[128];
+bouncing_bars_HandleTypeDef bars;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -134,7 +134,7 @@ int main(void)
   MX_I2S2_Init();
   /* USER CODE BEGIN 2 */
 
-  #ifdef DEBUG
+  #ifdef DEBUG_PRINT
   MX_USART1_UART_Init();
   HAL_Delay(1);
   printf("\r\nRESET\r\n");
@@ -146,9 +146,10 @@ int main(void)
   microGL_init_canvas(&screen, SSD1306_SCR_W, SSD1306_SCR_H,
     MICROGL_SCANMODE_RIGHTDOWN, MICROGL_LSB_FIRST, &display.fbptr);
   microGL_set_draw_mode(&screen, MICROGL_DRAWMODE_INV);
-  meter_init(&VUmeter[0], 3*PI/4, PI/4, 31, -13, 45);
-  meter_init(&VUmeter[1], 3*PI/4, PI/4, 96, -13, 45);
-  waveform_init(&wave, WAVEFORM_HORIZONTAL, 16, 128, 0, 47, 16, wave_buffer);
+  meter_init(&VUmeter[0], 3*PI/4, PI/4, 15+64, 0, 23);
+  meter_init(&VUmeter[1], 3*PI/4, PI/4, 48+64, 0, 23);
+  waveform_init(&wave, WAVEFORM_HORIZONTAL, 16, 128, 0, 47, 8, wave_buffer);
+  bouncing_bars_init(&bars, 5, 2, 6, 32, 8, 0);
   audio_player_init(&speaker, &hi2s2, audiobuffer, ELMNUM(audiobuffer));
   USB_DEVICE_Init();
   /* USER CODE END 2 */
@@ -164,6 +165,7 @@ int main(void)
         meter_draw_needle(&VUmeter[0], &screen);
         meter_draw_needle(&VUmeter[1], &screen);
         waveform_draw(&wave, &screen);
+        bouncing_bars_draw(bars, &screen);
         ssd1306_flush(&display);
       }
       else {
@@ -394,6 +396,8 @@ static void MX_GPIO_Init(void)
 void stream_start(uint32_t sample_rate) {
   meter_start(&VUmeter[0], sample_rate);
   meter_start(&VUmeter[1], sample_rate);
+  waveform_start(&wave, sample_rate);
+  bouncing_bars_start(bars, sample_rate);
   audio_player_start(&speaker, sample_rate);
 }
 
@@ -420,6 +424,7 @@ void data_received(int16_t* buff, uint16_t size) {
   meter_update_VU(&VUmeter[0], Lch, size/2);
   meter_update_VU(&VUmeter[1], Rch, size/2);
   waveform_update(&wave, mono, size/2);
+  bouncing_bars_update(bars, mono, size/2);
 }
 
 void volume_change(int16_t volume) {
@@ -454,7 +459,7 @@ void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s) {
   }
 }
 
-#ifdef DEBUG
+#ifdef DEBUG_PRINT
 int _write(int file, char *ptr, int len)
 {
   (void)file;

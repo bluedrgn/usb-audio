@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-// #ifdef DEBUG
+// #ifdef DEBUG_PRINT
 // #include <stdio.h>
 // #endif
 
@@ -397,7 +397,7 @@ static uint8_t USB_Audio_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *r
   uint16_t status_info = 0U;
   USBD_StatusTypeDef ret = USBD_OK;
 
-  // #ifdef DEBUG
+  // #ifdef DEBUG_PRINT
   // printf("%08lx Setup %02hx %02hx %04x %04x %04x\r\n", HAL_GetTick(), req->bmRequest, req->bRequest, req->wValue, req->wIndex, req->wLength);
   // #endif
 
@@ -557,13 +557,13 @@ static uint8_t USB_Audio_EP0_RxReady(USBD_HandleTypeDef *pdev) {
 
   switch (inst->control.selector) {
   case AUDIO_CONTROL_MUTE:
-    // #ifdef DEBUG
+    // #ifdef DEBUG_PRINT
     // printf("mute %u", inst->control.len);
     // #endif
     switch (inst->control.reqest) {
     case AUDIO_REQ_SET_CUR:
       inst->status.mute = *inst->control.data;
-      // #ifdef DEBUG
+      // #ifdef DEBUG_PRINT
       // printf(" SET_CUR %hu\r\n", *inst->control.data);
       // #endif
       __set_mute(pdev);
@@ -575,19 +575,19 @@ static uint8_t USB_Audio_EP0_RxReady(USBD_HandleTypeDef *pdev) {
     break;
 
   case AUDIO_CONTROL_VOLUME:
-    // #ifdef DEBUG
+    // #ifdef DEBUG_PRINT
     // printf("volume %u", inst->control.len);
     // #endif
     switch (inst->control.reqest) {
     case AUDIO_REQ_SET_CUR:
       inst->status.volume = *(int16_t*)inst->control.data;
-      // #ifdef DEBUG
+      // #ifdef DEBUG_PRINT
       // printf(" SET_CUR %d\r\n", *(int16_t*)inst->control.data);
       // #endif
       __set_volume(pdev);
       break;
 
-    // #ifdef DEBUG
+    // #ifdef DEBUG_PRINT
     // case AUDIO_REQ_SET_MIN:
     //   printf(" SET_MIN %d\r\n", *(int16_t*)inst->control.data);
     //   break;
@@ -668,12 +668,12 @@ static void AUDIO_REQ_Get(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req) {
 
   switch (HIBYTE(req->wValue)) {
   case MUTE_CONTROL:
-  #ifdef DEBUG
+  #ifdef DEBUG_PRINT
   #endif
     printf("mute %u", req->wLength);
     switch (req->bRequest) {
     case AUDIO_REQ_GET_CUR:
-  #ifdef DEBUG
+  #ifdef DEBUG_PRINT
   #endif
       printf(" GET_CUR %hu\r\n", instance->status.mute);
       *instance->control.data = instance->status.mute;
@@ -685,12 +685,12 @@ static void AUDIO_REQ_Get(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req) {
     break;
 
   case VOLUME_CONTROL:
-    #ifdef DEBUG
+    #ifdef DEBUG_PRINT
     printf("volume %u", req->wLength);
     #endif
     switch (req->bRequest) {
     case AUDIO_REQ_GET_CUR:
-      #ifdef DEBUG
+      #ifdef DEBUG_PRINT
       printf(" GET_CUR %d\r\n", instance->status.volume);
       #endif
       *(int16_t*)instance->control.data = instance->status.volume;
@@ -698,23 +698,23 @@ static void AUDIO_REQ_Get(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req) {
 
     case AUDIO_REQ_GET_MIN:
       /* 20×log(2^-15) ~ -90.309 dB */
-      #ifdef DEBUG
-      printf(" GET_MIN -23119\r\n");
-      #endif
+      // #ifdef DEBUG_PRINT
+      // printf(" GET_MIN -23119\r\n");
+      // #endif
       *(int16_t*)instance->control.data = -23119;
       break;
 
     case AUDIO_REQ_GET_MAX:
-      #ifdef DEBUG
-      printf(" GET_MAX 0\r\n");
-      #endif
+      // #ifdef DEBUG_PRINT
+      // printf(" GET_MAX 0\r\n");
+      // #endif
       *(int16_t*)instance->control.data = 0;
       break;
 
     case AUDIO_REQ_GET_RES:
-      #ifdef DEBUG
-      printf(" GET_RES 1\r\n");
-      #endif
+      // #ifdef DEBUG_PRINT
+      // printf(" GET_RES 1\r\n");
+      // #endif
       *(int16_t*)instance->control.data = 1;
       break;
 

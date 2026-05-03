@@ -34,10 +34,12 @@ typedef struct {
   // waveform_minmax_t accu;
   uint16_t w_ptr;
   uint16_t scale_remainder;
+  float LPF_pState[4];
+  float LPF_pCoeffs[5];
 } waveform_TypeDef;
 
 void waveform_init(waveform_TypeDef *waveform, waveform_orientation orientation,
-  int16_t amp, int16_t len, int16_t x, int16_t y, uint32_t scale,
-  waveform_minmax_t *buffer);
+  int16_t amp, int16_t len, int16_t x, int16_t y, uint32_t scale, waveform_minmax_t *buffer);
+void waveform_start(waveform_TypeDef *wf, uint32_t sample_rate);
 void waveform_update(waveform_TypeDef *waveform, float *buffer, size_t buffer_size);
 void waveform_draw(waveform_TypeDef *waveform, microGL_canvas *canvas);

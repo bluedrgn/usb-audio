@@ -10,7 +10,13 @@
 #include "microGL.h"
 #include "audio_player.h"
 #include <stdint.h>
+#include <math.h>
 
+
+#ifdef PI
+#undef PI
+#endif
+static const float PI = M_PI;
 
 typedef struct {
   float zero_angle;
