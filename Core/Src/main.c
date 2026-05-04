@@ -78,11 +78,9 @@ static ssd1306_display_t display = {
 };
 static microGL_canvas screen;
 static AudioPlayer_HandleTypeDef speaker;
-static AUDIOSAMPLE_TYPE audiobuffer[768];
-static meter_instance_t VUmeter[2];
-waveform_TypeDef wave;
-waveform_minmax_t wave_buffer[128];
-bouncing_bars_HandleTypeDef bars;
+static VUmeter_HandleTypeDef VUmeter[2];
+static waveform_HandleTypeDef wave;
+static bouncing_bars_HandleTypeDef bars;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -148,9 +146,9 @@ int main(void)
   microGL_set_draw_mode(&screen, MICROGL_DRAWMODE_INV);
   meter_init(&VUmeter[0], 3*PI/4, PI/4, 15+64, 0, 23);
   meter_init(&VUmeter[1], 3*PI/4, PI/4, 48+64, 0, 23);
-  waveform_init(&wave, WAVEFORM_HORIZONTAL, 16, 128, 0, 47, 8, wave_buffer);
+  waveform_init(&wave, WAVEFORM_HORIZONTAL, 16, 128, 0, 47, 8);
   bouncing_bars_init(&bars, 5, 2, 6, 32, 8, 0);
-  audio_player_init(&speaker, &hi2s2, audiobuffer, ELMNUM(audiobuffer));
+  audio_player_init(&speaker, &hi2s2, 15, APLAYER_I2S_32BIT);
   USB_DEVICE_Init();
   /* USER CODE END 2 */
 
@@ -160,11 +158,11 @@ int main(void)
   {
     static bool display_on = false;
     if (display_on) {
-      if (speaker.playback == APLAYER_PLAY) {
+      if (audio_player_is_playing(speaker)) {
         microGL_clear(&screen, NULL);
-        meter_draw_needle(&VUmeter[0], &screen);
-        meter_draw_needle(&VUmeter[1], &screen);
-        waveform_draw(&wave, &screen);
+        meter_draw_needle(VUmeter[0], &screen);
+        meter_draw_needle(VUmeter[1], &screen);
+        waveform_draw(wave, &screen);
         bouncing_bars_draw(bars, &screen);
         ssd1306_flush(&display);
       }
@@ -174,7 +172,7 @@ int main(void)
       }
     }
     else {
-      if (speaker.playback == APLAYER_PLAY) {
+      if (audio_player_is_playing(speaker)) {
         display_on = true;
         ssd1306_on(&display);
       }
@@ -394,41 +392,42 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 void stream_start(uint32_t sample_rate) {
-  meter_start(&VUmeter[0], sample_rate);
-  meter_start(&VUmeter[1], sample_rate);
-  waveform_start(&wave, sample_rate);
+  meter_start(VUmeter[0], sample_rate);
+  meter_start(VUmeter[1], sample_rate);
+  waveform_start(wave, sample_rate);
   bouncing_bars_start(bars, sample_rate);
-  audio_player_start(&speaker, sample_rate);
+  audio_player_start(speaker, sample_rate);
 }
 
 void stream_end() {
-  audio_player_stop(&speaker);
+  audio_player_stop(speaker);
 }
 
 
 void data_received(int16_t* buff, uint16_t size) {
-  AudioSample_f32_t fbuff[size/2];
+  float fbuff[size];
   float Lch[size/2], Rch[size/2];
-  float mono[size/2];
+  float Mono[size/2];
 
-  arm_q15_to_float(buff, (float*)fbuff, size);
+  arm_q15_to_float(buff, fbuff, size);
 
-  audio_player_enque_samples(&speaker, fbuff, size/2);
+  audio_player_enque_samples(speaker, fbuff, size);
 
   for (size_t i = 0; i < size/2; i++) {
-    Lch[i] = fbuff[i].L;
-    Rch[i] = fbuff[i].R;
-    mono[i] = fbuff[i].L / 2 + fbuff[i].R / 2;
+    Lch[i] = fbuff[i*2];
+    Rch[i] = fbuff[i*2+1];
+    Mono[i] = Lch[i] / 2 + Rch[i] / 2;
   }
 
-  meter_update_VU(&VUmeter[0], Lch, size/2);
-  meter_update_VU(&VUmeter[1], Rch, size/2);
-  waveform_update(&wave, mono, size/2);
-  bouncing_bars_update(bars, mono, size/2);
+  meter_update_VU(VUmeter[0], Lch, size/2);
+  meter_update_VU(VUmeter[1], Rch, size/2);
+  waveform_update(wave, Mono, size/2);
+  bouncing_bars_update(bars, Mono, size/2);
 }
 
 void volume_change(int16_t volume) {
-  audio_player_set_volume(&speaker, volume);
+  float volume_dB = volume / 256.0f;
+  audio_player_set_volume(speaker, volume_dB);
 }
 
 USB_Audio_IntfTypeDef USB_Audio_Interface = {
@@ -455,7 +454,7 @@ void USB_DEVICE_Init(void)
 
 void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s) {
   if (hi2s == &hi2s2) {
-    audio_player_sync(&speaker);
+    audio_player_sync(speaker);
   }
 }
 

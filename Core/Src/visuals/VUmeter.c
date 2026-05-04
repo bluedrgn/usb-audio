@@ -7,10 +7,10 @@
 
 #include "visuals/VUmeter.h"
 #include "arm_math.h"
+#include "main.h"
 #include "stm32f4xx_hal.h"
 #include <stdint.h>
 #include <stdlib.h>
-#include <math.h>
 #include <string.h>
 
 
@@ -25,6 +25,22 @@
 #endif
 
 
+struct VUmeter_t{
+  float zero_angle;
+  float precession;
+  int16_t pivot_x;
+  int16_t pivot_y;
+  int16_t length;
+  float rise_slope;
+  float fall_slope;
+  float peak;
+  float value;
+  float position;
+  float inertia;
+  float sample_rate;
+};
+
+
 /** https://en.wikipedia.org/wiki/VU_meter */
 
 static const float rise_time = 0.3;
@@ -33,17 +49,23 @@ static const float P_gain = 30.0;
 static const float I_gain = 0.5;
 static const float sensitivity_gain = M_2_SQRTPI;
 
-static void update_phys(meter_instance_t *meter, float time);
+
+static void update_phys(VUmeter_HandleTypeDef meter, float time);
 static void reverseBresenhamsLine(microGL_canvas *canvas, float angle_rad, int16_t pivot_x, int16_t pivot_y, int16_t length);
 
+
 void meter_init(
-  meter_instance_t *meter,
+  VUmeter_HandleTypeDef *meter_ptr,
   float zero_angle,
   float max_angle,
   int16_t pivot_x,
   int16_t pivot_y,
   int16_t length)
 {
+  if (!meter_ptr) Error_Handler();
+  VUmeter_HandleTypeDef meter = malloc(sizeof(struct VUmeter_t));
+  if (!meter) Error_Handler();
+  *meter_ptr = meter;
   meter->zero_angle = zero_angle;
   meter->precession = max_angle - zero_angle;
   meter->pivot_x = pivot_x;
@@ -51,7 +73,7 @@ void meter_init(
   meter->length = length;
 }
 
-void meter_start(meter_instance_t *meter, uint32_t sample_rate) {
+void meter_start(VUmeter_HandleTypeDef meter, uint32_t sample_rate) {
   meter->rise_slope = (   PI / rise_time) / (float)sample_rate;
   meter->fall_slope = (-1.0f / fall_time) / (float)sample_rate;
   meter->peak = 0.0f;
@@ -61,7 +83,7 @@ void meter_start(meter_instance_t *meter, uint32_t sample_rate) {
   meter->sample_rate = (float)sample_rate;
 }
 
-void meter_draw_needle(meter_instance_t *meter, microGL_canvas *canvas) {
+void meter_draw_needle(VUmeter_HandleTypeDef meter, microGL_canvas *canvas) {
   float rad;
 
   rad = meter->zero_angle + (meter->position * meter->precession);
@@ -69,14 +91,14 @@ void meter_draw_needle(meter_instance_t *meter, microGL_canvas *canvas) {
   reverseBresenhamsLine(canvas, rad, meter->pivot_x, meter->pivot_y, meter->length);
 }
 
-void meter_update_VU_q15(meter_instance_t *meter, int16_t *buffer, size_t buffer_size) {
+void meter_update_VU_q15(VUmeter_HandleTypeDef meter, int16_t *buffer, size_t buffer_size) {
   float fbuf[buffer_size];
 
   arm_q15_to_float(buffer, fbuf, buffer_size);
   meter_update_VU(meter, fbuf, buffer_size);
 }
 
-void meter_update_VU(meter_instance_t *meter, float *buffer, size_t buffer_size) {
+void meter_update_VU(VUmeter_HandleTypeDef meter, float *buffer, size_t buffer_size) {
   float diff, acc, time;
   
   arm_scale_f32(buffer, sensitivity_gain, buffer, buffer_size);
@@ -98,7 +120,7 @@ void meter_update_VU(meter_instance_t *meter, float *buffer, size_t buffer_size)
   update_phys(meter, time);
 }
 
-static void update_phys(meter_instance_t *meter, float time) {
+static void update_phys(VUmeter_HandleTypeDef meter, float time) {
   float error;
 
   error = meter->value - meter->position;

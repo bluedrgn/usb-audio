@@ -1,6 +1,14 @@
+/*
+ * resample.h
+ *
+ *  Created on: Apr 10, 2026
+ *      Author: bluedrgn
+ */
+
 #pragma once
 
 #include "audio_player.h"
+#include "audio_player_types.h"
 
 #ifndef MIN
     #define MIN(a, b)  (((a) < (b)) ? (a) : (b))

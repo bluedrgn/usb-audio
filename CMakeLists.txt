@@ -103,10 +103,13 @@ target_compile_options(CMSISDSP PRIVATE
     -mfloat-abi=hard
     -mfpu=fpv4-sp-d16
     -O3
+    -g0
 )
 
-# set_source_files_properties(
-#         Core/Src/VUmeter.c
-#     PROPERTIES
-#         COMPILE_OPTIONS "-O3"
-# )
+set_source_files_properties(
+        Core/Src/visuals/VUmeter.c
+        Core/Src/visuals/bouncing_bars.c
+        Core/Src/visuals/waveform.c
+    PROPERTIES
+        COMPILE_OPTIONS "-O3"
+)

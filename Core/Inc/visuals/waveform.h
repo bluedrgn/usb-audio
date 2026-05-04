@@ -11,35 +11,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define WAVEFORM_BUFFER_SIZE 
-
 typedef enum {
   WAVEFORM_HORIZONTAL,
   WAVEFORM_VERTICAL
 } waveform_orientation;
 
-typedef struct {
-  int16_t max;
-  int16_t min;
-} waveform_minmax_t;
+typedef struct waveform_t* waveform_HandleTypeDef;
 
-typedef struct {
-  waveform_orientation orientation;
-  int16_t amplitude;
-  int16_t length;
-  int16_t origo_x;
-  int16_t origo_y;
-  uint32_t scale;
-  waveform_minmax_t *buffer;
-  // waveform_minmax_t accu;
-  uint16_t w_ptr;
-  uint16_t scale_remainder;
-  float LPF_pState[4];
-  float LPF_pCoeffs[5];
-} waveform_TypeDef;
-
-void waveform_init(waveform_TypeDef *waveform, waveform_orientation orientation,
-  int16_t amp, int16_t len, int16_t x, int16_t y, uint32_t scale, waveform_minmax_t *buffer);
-void waveform_start(waveform_TypeDef *wf, uint32_t sample_rate);
-void waveform_update(waveform_TypeDef *waveform, float *buffer, size_t buffer_size);
-void waveform_draw(waveform_TypeDef *waveform, microGL_canvas *canvas);
+void waveform_init(waveform_HandleTypeDef *pWaveform, waveform_orientation orientation,
+  int16_t amp, int16_t len, int16_t x, int16_t y, uint32_t scale);
+void waveform_start(waveform_HandleTypeDef waveform, uint32_t sample_rate);
+void waveform_update(waveform_HandleTypeDef waveform, float *buffer, size_t buffer_size);
+void waveform_draw(waveform_HandleTypeDef waveform, microGL_canvas *canvas);
