@@ -56,6 +56,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/visuals/bouncing_bars.c
     Core/Src/visuals/waveform.c
     Core/Src/filter_helpers.c
+    Core/Src/ringbuf.c
 )
 
 # Add include paths

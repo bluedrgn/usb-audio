@@ -23,15 +23,19 @@
 /* USER CODE BEGIN Includes */
 
 #include "dsp/support_functions.h"
+#include "dsp/utils.h"
+#include "stm32f411xe.h"
 #include "stm32f4xx_hal.h"
 // #include "fonts.h"
 #include "microGL.h"
 // #include "sh1106.h"
 #include "ssd1306.h"
 // #include "gu128x32d.h"
+#include "stm32f4xx_hal_tim.h"
 #include "visuals/VUmeter.h"
 #include "visuals/waveform.h"
 #include "visuals/bouncing_bars.h"
+#include "ringbuf.h"
 #include "usb_audio_class.h"
 #include "audio_player.h"
 #include "usbd_core.h"
@@ -54,7 +58,7 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define ELMNUM(arr) (sizeof((arr))/sizeof((*arr)))
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -63,6 +67,8 @@ DMA_HandleTypeDef hdma_i2c1_tx;
 
 I2S_HandleTypeDef hi2s2;
 DMA_HandleTypeDef hdma_spi2_tx;
+
+TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_usart1_tx;
@@ -81,6 +87,7 @@ static AudioPlayer_HandleTypeDef speaker;
 static VUmeter_HandleTypeDef VUmeter[2];
 static waveform_HandleTypeDef wave;
 static bouncing_bars_HandleTypeDef bars;
+static ringbuf_Handle audio_stream;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -90,6 +97,7 @@ static void MX_DMA_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2S2_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 static void USB_DEVICE_Init(void);
 /* USER CODE END PFP */
@@ -105,6 +113,7 @@ static void USB_DEVICE_Init(void);
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -130,6 +139,7 @@ int main(void)
   MX_DMA_Init();
   MX_I2C1_Init();
   MX_I2S2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
   #ifdef DEBUG_PRINT
@@ -147,7 +157,8 @@ int main(void)
   meter_init(&VUmeter[0], 3*PI/4, PI/4, 15+64, 0, 23);
   meter_init(&VUmeter[1], 3*PI/4, PI/4, 48+64, 0, 23);
   waveform_init(&wave, WAVEFORM_HORIZONTAL, 16, 128, 0, 47, 8);
-  bouncing_bars_init(&bars, 5, 2, 6, 32, 8, 0);
+  bouncing_bars_init(&bars, 7, 2, 6, 32, 0, 0);
+  ringbuf_init(&audio_stream, 1280);
   audio_player_init(&speaker, &hi2s2, 15, APLAYER_I2S_32BIT);
   USB_DEVICE_Init();
   /* USER CODE END 2 */
@@ -159,22 +170,47 @@ int main(void)
     static bool display_on = false;
     if (display_on) {
       if (audio_player_is_playing(speaker)) {
-        microGL_clear(&screen, NULL);
-        meter_draw_needle(VUmeter[0], &screen);
-        meter_draw_needle(VUmeter[1], &screen);
-        waveform_draw(wave, &screen);
-        bouncing_bars_draw(bars, &screen);
-        ssd1306_flush(&display);
+
+        while(1) {
+          size_t size;
+          ringbuf_status_t rbstat;
+          rbstat = ringbuf_avaliable(audio_stream,&size);
+          if (rbstat != RINGBUF_OK) Error_Handler();
+          size = MIN(size, 384U);
+          size /= 8;  /** Ensuring that size is an even multiple of float32-s size */
+          if (!size) break;
+          float audio_data_f32[96];
+          ringbuf_dequeue(audio_stream, audio_data_f32, size * 8);
+
+          float Lch[48], Rch[48];
+          float Mono[48];
+
+          for (size_t i = 0; i < size; i++) {
+            Lch[i] = audio_data_f32[i*2];
+            Rch[i] = audio_data_f32[i*2+1];
+            Mono[i] = Lch[i] / 2 + Rch[i] / 2;
+          }
+
+          meter_update_VU(VUmeter[0], Lch, size);
+          meter_update_VU(VUmeter[1], Rch, size);
+          waveform_update(wave, Mono, size);
+          bouncing_bars_update(bars, Mono, size);
+        }
+
+        HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON,  PWR_SLEEPENTRY_WFE_NO_EVT_CLEAR);
       }
       else {
-        display_on = false;
+        HAL_TIM_Base_Stop_IT(&htim3);
         ssd1306_off(&display);
+        display_on = false;
       }
     }
     else {
       if (audio_player_is_playing(speaker)) {
-        display_on = true;
+        // htim3.Instance->CNT = 0;
+        HAL_TIM_Base_Start_IT(&htim3);
         ssd1306_on(&display);
+        display_on = true;
       }
       else {
         HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON,  PWR_SLEEPENTRY_WFE_NO_EVT_CLEAR);
@@ -248,7 +284,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.ClockSpeed = 615000;
+  hi2c1.Init.ClockSpeed = 800000;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_16_9;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
@@ -301,6 +337,51 @@ static void MX_I2S2_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 1600-1;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 1000-1;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
   * @brief USART1 Initialization Function
   * @param None
   * @retval None
@@ -345,13 +426,13 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Stream1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
   /* DMA1_Stream4_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream4_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Stream4_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
   /* DMA2_Stream7_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream7_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA2_Stream7_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream7_IRQn);
 
 }
@@ -404,25 +485,11 @@ void stream_end() {
 }
 
 
-void data_received(int16_t* buff, uint16_t size) {
-  float fbuff[size];
-  float Lch[size/2], Rch[size/2];
-  float Mono[size/2];
-
-  arm_q15_to_float(buff, fbuff, size);
-
-  audio_player_enque_samples(speaker, fbuff, size);
-
-  for (size_t i = 0; i < size/2; i++) {
-    Lch[i] = fbuff[i*2];
-    Rch[i] = fbuff[i*2+1];
-    Mono[i] = Lch[i] / 2 + Rch[i] / 2;
-  }
-
-  meter_update_VU(VUmeter[0], Lch, size/2);
-  meter_update_VU(VUmeter[1], Rch, size/2);
-  waveform_update(wave, Mono, size/2);
-  bouncing_bars_update(bars, Mono, size/2);
+void data_received(int16_t* audio_data_q15, uint16_t size) {
+  float audio_data_f32[size];
+  arm_q15_to_float(audio_data_q15, audio_data_f32, size);
+  audio_player_enqueue(speaker, audio_data_f32, size);
+  ringbuf_enqueue(audio_stream, audio_data_f32, size * sizeof(float));
 }
 
 void volume_change(int16_t volume) {
@@ -455,6 +522,19 @@ void USB_DEVICE_Init(void)
 void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s) {
   if (hi2s == &hi2s2) {
     audio_player_sync(speaker);
+  }
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+  if (htim == &htim3) {
+    do {
+      microGL_clear(&screen, NULL);
+      meter_draw_needle(VUmeter[0], &screen);
+      meter_draw_needle(VUmeter[1], &screen);
+      waveform_draw(wave, &screen);
+      bouncing_bars_draw(bars, &screen);
+    }while (!ssd1306_poll_flush_complete());
+    ssd1306_flush(&display);
   }
 }
 

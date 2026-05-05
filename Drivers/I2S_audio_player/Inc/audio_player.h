@@ -23,7 +23,7 @@ void audio_player_init(AudioPlayer_HandleTypeDef *player, I2S_HandleTypeDef* i2s
 bool audio_player_is_playing(AudioPlayer_HandleTypeDef player);
 void audio_player_start(AudioPlayer_HandleTypeDef player, uint32_t sample_rate);
 void audio_player_stop(AudioPlayer_HandleTypeDef player);
-void audio_player_enque_samples(AudioPlayer_HandleTypeDef player, float *buffer, size_t buffer_size);
+void audio_player_enqueue(AudioPlayer_HandleTypeDef player, float *buffer, size_t buffer_size);
 /* !Call this function from the corresponding HAL_I2S_TxCpltCallback! */
 void audio_player_sync(AudioPlayer_HandleTypeDef player);
 void audio_player_set_volume(AudioPlayer_HandleTypeDef player, float volume_dB);

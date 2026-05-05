@@ -92,18 +92,14 @@ void waveform_update(waveform_HandleTypeDef wf, float *buf, size_t size) {
 }
 
 void waveform_draw(waveform_HandleTypeDef wf, microGL_canvas *canvas) {
-  uint16_t r_ptr;
-
   if (!wf) Error_Handler();
 
-  r_ptr = wf->w_ptr + 1;
+  uint16_t r_ptr = wf->w_ptr + 1;
 
   if (wf->orientation == WAVEFORM_HORIZONTAL) {
     for (int16_t x = wf->origo_x; x != (wf->origo_x + wf->length); x += (wf->length >= 0) ? 1 : -1) {
       r_ptr %= wf->length;
       microGL_draw_vertical_line(canvas, x, wf->origo_y + wf->buffer[r_ptr].min, wf->origo_y + wf->buffer[r_ptr].max);
-      // int16_t y = wf->origo_y + (wf->buffer[r_ptr].min + wf->buffer[r_ptr].max);
-      // microGL_set_pixel(canvas, x, y);
       r_ptr++;
     }
   }
@@ -111,8 +107,6 @@ void waveform_draw(waveform_HandleTypeDef wf, microGL_canvas *canvas) {
     for (int16_t y = wf->origo_y; y != (wf->origo_y + wf->length); y += (wf->length >= 0) ? 1 : -1) {
       r_ptr %= wf->length;
       microGL_draw_horizontal_line(canvas, wf->origo_x + wf->buffer[r_ptr].min, wf->origo_x + wf->buffer[r_ptr].max, y);
-      // int16_t x = wf->origo_x + (wf->buffer[r_ptr].min + wf->buffer[r_ptr].max);
-      // microGL_set_pixel(canvas, x, y);
       r_ptr++;
     }
   }

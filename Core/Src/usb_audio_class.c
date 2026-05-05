@@ -5,7 +5,7 @@
 #include "usbd_def.h"
 #include "usbd_ctlreq.h"
 #include <stdint.h>
-#include <stdlib.h>
+// #include <stdlib.h>
 #include <string.h>
 // #ifdef DEBUG_PRINT
 // #include <stdio.h>
@@ -668,14 +668,14 @@ static void AUDIO_REQ_Get(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req) {
 
   switch (HIBYTE(req->wValue)) {
   case MUTE_CONTROL:
-  #ifdef DEBUG_PRINT
-  #endif
+    #ifdef DEBUG_PRINT
     printf("mute %u", req->wLength);
+    #endif
     switch (req->bRequest) {
     case AUDIO_REQ_GET_CUR:
-  #ifdef DEBUG_PRINT
-  #endif
+      #ifdef DEBUG_PRINT
       printf(" GET_CUR %hu\r\n", instance->status.mute);
+      #endif
       *instance->control.data = instance->status.mute;
       break;
 
@@ -698,23 +698,23 @@ static void AUDIO_REQ_Get(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req) {
 
     case AUDIO_REQ_GET_MIN:
       /* 20×log(2^-15) ~ -90.309 dB */
-      // #ifdef DEBUG_PRINT
-      // printf(" GET_MIN -23119\r\n");
-      // #endif
+      #ifdef DEBUG_PRINT
+      printf(" GET_MIN -23119\r\n");
+      #endif
       *(int16_t*)instance->control.data = -23119;
       break;
 
     case AUDIO_REQ_GET_MAX:
-      // #ifdef DEBUG_PRINT
-      // printf(" GET_MAX 0\r\n");
-      // #endif
+      #ifdef DEBUG_PRINT
+      printf(" GET_MAX 0\r\n");
+      #endif
       *(int16_t*)instance->control.data = 0;
       break;
 
     case AUDIO_REQ_GET_RES:
-      // #ifdef DEBUG_PRINT
-      // printf(" GET_RES 1\r\n");
-      // #endif
+      #ifdef DEBUG_PRINT
+      printf(" GET_RES 1\r\n");
+      #endif
       *(int16_t*)instance->control.data = 1;
       break;
 

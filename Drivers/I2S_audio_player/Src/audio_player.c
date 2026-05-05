@@ -77,7 +77,7 @@ void audio_player_init(AudioPlayer_HandleTypeDef *player_ptr, I2S_HandleTypeDef*
 
 bool audio_player_is_playing(AudioPlayer_HandleTypeDef player) {
   switch (player->playback) {
-  // case APLAYER_START:
+  case APLAYER_START:
   case APLAYER_PLAY:
     return true;
   default:
@@ -123,7 +123,7 @@ void audio_player_stop(AudioPlayer_HandleTypeDef player) {
   }
 }
 
-void audio_player_enque_samples(AudioPlayer_HandleTypeDef player, float *buf_f32, size_t buffer_size) {
+void audio_player_enqueue(AudioPlayer_HandleTypeDef player, float *buf_f32, size_t buffer_size) {
   if (!player || !buf_f32 || !buffer_size) Error_Handler();
 
   AudioSample_f32_t tmp_in[(buffer_size / chs) + 4];
